@@ -9,8 +9,8 @@ Loon 配置示例（直接复制到 Loon → 插件 或 脚本）：
 # 抓包保存账号参数（打开 WeTalk App 触发即可）
 http-request ^https:\/\/api\.wetalkapp\.com\/app\/queryBalanceAndBonus script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/wetalk.js, timeout=60, tag=WeTalk抓包
 
-# 定时签到任务（每3小时运行一次）
-cron "0 0/3 * * *" script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/wetalk.js, tag=WeTalk签到, wake-system=1
+# 定时签到任务（每2小时运行一次）
+cron "0 0/2 * * *" script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/wetalk.js, tag=WeTalk签到, wake-system=1
 
 [MITM]
 hostname = api.wetalkapp.com
