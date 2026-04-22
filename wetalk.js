@@ -1,7 +1,8 @@
-// 2026/04/21
+// 2026/04/22
 /*
 @Name：WeTalk 自动化签到+视频奖励 (Loon版)
 @Author：TG@ZenMoFiShi (适配 by Grok)
+@Update：新增Token开关、自定义定时器配置
 
 Loon 配置示例（直接复制到 Loon → 插件 或 脚本）：
 
@@ -9,11 +10,18 @@ Loon 配置示例（直接复制到 Loon → 插件 或 脚本）：
 # 抓包保存账号参数（打开 WeTalk App 触发即可）
 http-request ^https:\/\/api\.wetalkapp\.com\/app\/queryBalanceAndBonus script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/wetalk.js, timeout=60, tag=WeTalk抓包
 
-# 定时签到任务（每4小时运行一次）
-cron "20 */4 * * *" script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/wetalk.js, tag=WeTalk签到, wake-system=1
+# 定时签到任务（自定义cron表达式，示例：每4小时20分执行）
+cron "20 */4 * * *" script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/wetalk.js, tag=WeTalk签到, wake-system=1, env={"WETALK_TOKEN_SWITCH":"true","WETALK_CRON_CONFIG":"20 */4 * * *","WETALK_VIDEO_MAX":"5","WETALK_VIDEO_DELAY":"8000"}
 
 [MITM]
 hostname = api.wetalkapp.com
+
+# 可配置项说明：
+# WETALK_TOKEN_SWITCH: 是否启用脚本（true/false），默认true
+# WETALK_CRON_CONFIG: 自定义cron表达式（仅注释用，实际生效以Script的cron为准）
+# WETALK_VIDEO_MAX: 最大视频奖励次数，默认5
+# WETALK_VIDEO_DELAY: 视频间隔毫秒数，默认8000
+# WETALK_ACCOUNT_GAP: 账号间隔毫秒数，默认3500
 */
 
 const isLoon = typeof $persistentStore !== 'undefined';
@@ -23,17 +31,44 @@ const scriptName = 'WeTalk';
 const storeKey = 'wetalk_accounts_v1';
 const SECRET = '0fOiukQq7jXZV2GRi9LGlO';
 const API_HOST = 'api.wetalkapp.com';
-const MAX_VIDEO = 5;
-const VIDEO_DELAY = 8000;
-const ACCOUNT_GAP = 3500;
 
+// ==================== 新增：可配置项（支持环境变量覆盖） ====================
+// 从环境变量读取配置（Quantumult X 支持 env 参数，Loon 可通过 $persistentStore 设置）
+function getEnvConfig(key, defaultValue) {
+    // Quantumult X 环境变量
+    if (isQuanX && $environment && $environment[key]) {
+        return $environment[key];
+    }
+    // Loon 持久化存储
+    if (isLoon && $persistentStore.read(key)) {
+        return $persistentStore.read(key);
+    }
+    // 默认值
+    return defaultValue;
+}
+
+// 核心配置（可通过环境变量覆盖）
+const CONFIG = {
+    // Token开关：是否启用脚本（true/false）
+    TOKEN_SWITCH: getEnvConfig('WETALK_TOKEN_SWITCH', 'true').toLowerCase() === 'true',
+    // 定时器配置（仅记录，实际cron以脚本配置为准）
+    CRON_CONFIG: getEnvConfig('WETALK_CRON_CONFIG', '20 */4 * * *'),
+    // 视频奖励最大次数
+    VIDEO_MAX: parseInt(getEnvConfig('WETALK_VIDEO_MAX', '5')),
+    // 视频间隔（毫秒）
+    VIDEO_DELAY: parseInt(getEnvConfig('WETALK_VIDEO_DELAY', '8000')),
+    // 账号执行间隔（毫秒）
+    ACCOUNT_GAP: parseInt(getEnvConfig('WETALK_ACCOUNT_GAP', '3500'))
+};
+
+// IOS设备信息池（原有）
 const IOS_VERSIONS = ['17.5.1','17.6.1','17.4.1','17.2.1','16.7.8','17.6','17.3.1','18.0.1','17.1.2','16.6.1'];
 const IOS_SCALES = ['2.00','3.00','3.00','2.00','3.00'];
 const IPHONE_MODELS = ['iPhone14,3','iPhone13,3','iPhone15,3','iPhone16,1','iPhone14,7','iPhone13,2','iPhone15,2','iPhone12,1'];
 const CFN_VERS = ['1410.0.3','1494.0.7','1568.100.1','1209.1','1474.0.4','1568.200.2'];
 const DARWIN_VERS = ['22.6.0','23.5.0','23.6.0','24.0.0','22.4.0'];
 
-// ==================== 环境适配函数 ====================
+// ==================== 环境适配函数（原有） ====================
 function getPrefsValue(key) {
     if (isLoon) return $persistentStore.read(key);
     if (isQuanX) return $prefs.valueForKey(key);
@@ -65,9 +100,8 @@ function httpRequest(options) {
     });
 }
 
-// MD5 函数（保持不变，代码太长此处省略，直接复制原脚本中的 MD5 函数）
+// ==================== MD5函数（原有） ====================
 function MD5(string) {
-  // ...（原脚本中的完整 MD5 实现，保持不变）
   function RotateLeft(lValue, iShiftBits) { return (lValue << iShiftBits) | (lValue >>> (32 - iShiftBits)); }
   function AddUnsigned(lX, lY) {
     const lX4 = lX & 0x40000000, lY4 = lY & 0x40000000, lX8 = lX & 0x80000000, lY8 = lY & 0x80000000;
@@ -140,8 +174,7 @@ function MD5(string) {
   return (WordToHex(a) + WordToHex(b) + WordToHex(c) + WordToHex(d)).toLowerCase();
 }
 
-// 其余函数保持不变（getUTCSignDate、normalizeHeaderNameMap、parseRawQuery、fingerprintOf、loadStore、saveStore、pickItem、buildUA、buildSignedParamsRaw、buildUrl、cloneHeaders、buildHeaders、sleep 等）
-
+// ==================== 工具函数（原有） ====================
 function getUTCSignDate() {
   const now = new Date();
   const pad = n => String(n).padStart(2, '0');
@@ -252,7 +285,7 @@ function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
-// ==================== 执行账号任务 ====================
+// ==================== 执行账号任务（修改：使用CONFIG配置） ====================
 function runAccount(acc, index, total) {
   const tag = `[账号${index+1}/${total} ${acc.alias || acc.id}]`;
   const ua = buildUA(acc.baseUA, acc.uaSeed);
@@ -289,7 +322,7 @@ function runAccount(acc, index, total) {
             msgs.push(`❌ 视频${i}：${err.error || '请求失败'}`);
             resolve();
           });
-        }, i === 0 ? 1500 : VIDEO_DELAY);
+        }, i === 0 ? 1500 : CONFIG.VIDEO_DELAY); // 使用配置的视频间隔
       });
     }
     return next();
@@ -308,7 +341,7 @@ function runAccount(acc, index, total) {
       if (d.retcode === 0) msgs.push(`✅ 签到：${(d.result?.bonusHint || d.retmsg || '').replace(/\n/g, ' ')}`);
       else msgs.push(`⚠️ 签到：${d.retmsg}`);
     } catch (e) { msgs.push('❌ 签到：解析失败'); }
-    return doVideoLoop(MAX_VIDEO);
+    return doVideoLoop(CONFIG.VIDEO_MAX); // 使用配置的最大视频次数
   }).then(() => fetchApi('queryBalanceAndBonus')).then(res => {
     try {
       const d = JSON.parse(res.body);
@@ -321,9 +354,9 @@ function runAccount(acc, index, total) {
   });
 }
 
-// ==================== 主流程 ====================
+// ==================== 主流程（新增：Token开关判断） ====================
 if (typeof $request !== 'undefined' && $request) {
-  // === 抓包保存账号参数 ===
+  // === 抓包保存账号参数（不受Token开关控制） ===
   const paramsRaw = parseRawQuery($request.url);
   const headersMap = normalizeHeaderNameMap($request.headers || {});
   let baseUA = '';
@@ -353,20 +386,36 @@ if (typeof $request !== 'undefined' && $request) {
   console.log(`【${scriptName}】${existed ? 'update' : 'add'} account ${fp}`);
   $done({});
 } else {
-  // === 执行定时任务 ===
+  // === 执行定时任务（新增：Token开关控制） ===
+  if (!CONFIG.TOKEN_SWITCH) {
+    // Token开关关闭时直接结束
+    notify('🔴 脚本已禁用', `Token开关：关闭\n当前定时器配置：${CONFIG.CRON_CONFIG}`);
+    $done();
+    return;
+  }
+
+  // Token开关开启时执行原有逻辑
   const store = loadStore();
   const ids = store.order.filter(id => store.accounts[id]);
   if (!ids.length) {
-    notify('⚠️ 未抓到任何账号', '请先打开 WeTalk 触发抓包');
+    notify('⚠️ 未抓到任何账号', `Token开关：开启\n定时器配置：${CONFIG.CRON_CONFIG}\n请先打开 WeTalk 触发抓包`);
     $done();
   } else {
     const total = ids.length;
     const results = [];
     let chain = Promise.resolve();
+    // 打印当前配置信息
+    results.push(`⚙️ 当前配置：
+Token开关：${CONFIG.TOKEN_SWITCH ? '开启' : '关闭'}
+定时器：${CONFIG.CRON_CONFIG}
+最大视频次数：${CONFIG.VIDEO_MAX}
+视频间隔：${CONFIG.VIDEO_DELAY}ms
+账号间隔：${CONFIG.ACCOUNT_GAP}ms`);
+    
     ids.forEach((id, idx) => {
       chain = chain.then(() => runAccount(store.accounts[id], idx, total))
         .then(text => { results.push(text); })
-        .then(() => idx < ids.length - 1 ? sleep(ACCOUNT_GAP) : null);
+        .then(() => idx < ids.length - 1 ? sleep(CONFIG.ACCOUNT_GAP) : null); // 使用配置的账号间隔
     });
     chain.then(() => {
       notify(`🎉 全部完成 (${total}个账号)`, results.join('\n———\n'));
