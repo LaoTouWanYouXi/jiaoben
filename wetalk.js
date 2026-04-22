@@ -1,106 +1,109 @@
 // 2026/04/22
 /*
-@Name：WeTalk 自动化签到+视频奖励 (Loon版)
-@Author：TG@ZenMoFiShi (适配 by Grok)
-@Update：新增Token开关、自定义定时器配置
-
-Loon 配置示例（直接复制到 Loon → 插件 或 脚本）：
-
-[Script]
-# 抓包保存账号参数（打开 WeTalk App 触发即可）
-http-request ^https:\/\/api\.wetalkapp\.com\/app\/queryBalanceAndBonus script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/wetalk.js, timeout=60, tag=WeTalk抓包
-
-# 定时签到任务（自定义cron表达式，示例：每4小时20分执行）
-cron "20 */4 * * *" script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/wetalk.js, tag=WeTalk签到
-
-[MITM]
-hostname = api.wetalkapp.com
-
-# 可配置项说明：
-# WETALK_TOKEN_SWITCH: 是否启用脚本（true/false），默认true
-# WETALK_CRON_CONFIG: 自定义cron表达式（仅注释用，实际生效以Script的cron为准）
-# WETALK_VIDEO_MAX: 最大视频奖励次数，默认5
-# WETALK_VIDEO_DELAY: 视频间隔毫秒数，默认8000
-# WETALK_ACCOUNT_GAP: 账号间隔毫秒数，默认3500
+@Name：WeTalk 自动化签到+视频奖励 (可视化配置版)
+@Author：TG@ZenMoFiShi
+@Configuration
+{
+  "name": "WeTalk 签到设置",
+  "settings": [
+    {
+      "key": "wetalk_enable",
+      "title": "启用脚本",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "wetalk_cron",
+      "title": "定时规则(cron)",
+      "type": "text",
+      "default": "20 */4 * * *"
+    },
+    {
+      "key": "wetalk_video_max",
+      "title": "最大视频次数",
+      "type":number",
+      "default":5
+    },
+    {
+      "key": "wetalk_video_delay",
+      "title": "视频间隔(ms)",
+      "type":number",
+      "default":8000
+    },
+    {
+      "key": "wetalk_account_gap",
+      "title": "账号间隔(ms)",
+      "type":number",
+      "default":3500
+    }
+  ]
+}
 */
 
 const isLoon = typeof $persistentStore !== 'undefined';
 const isQuanX = typeof $task !== 'undefined';
-
 const scriptName = 'WeTalk';
 const storeKey = 'wetalk_accounts_v1';
 const SECRET = '0fOiukQq7jXZV2GRi9LGlO';
 const API_HOST = 'api.wetalkapp.com';
 
-// ==================== 新增：可配置项（支持环境变量覆盖） ====================
-// 从环境变量读取配置（Quantumult X 支持 env 参数，Loon 可通过 $persistentStore 设置）
-function getEnvConfig(key, defaultValue) {
-    // Quantumult X 环境变量
-    if (isQuanX && $environment && $environment[key]) {
-        return $environment[key];
+// 可视化配置读取
+function getConfig(key, defaultValue) {
+  try {
+    if (isLoon) {
+      let v = $persistentStore.read(key);
+      if (v === null || v === undefined) return defaultValue;
+      if (typeof defaultValue === 'boolean') return v === 'true';
+      if (typeof defaultValue === 'number') return Number(v);
+      return v;
     }
-    // Loon 持久化存储
-    if (isLoon && $persistentStore.read(key)) {
-        return $persistentStore.read(key);
-    }
-    // 默认值
-    return defaultValue;
+    if (isQuanX && $config) return $config[key] ?? defaultValue;
+  } catch (e) {}
+  return defaultValue;
 }
 
-// 核心配置（可通过环境变量覆盖）
-const CONFIG = {
-    // Token开关：是否启用脚本（true/false）
-    TOKEN_SWITCH: getEnvConfig('WETALK_TOKEN_SWITCH', 'true').toLowerCase() === 'true',
-    // 定时器配置（仅记录，实际cron以脚本配置为准）
-    CRON_CONFIG: getEnvConfig('WETALK_CRON_CONFIG', '20 */4 * * *'),
-    // 视频奖励最大次数
-    VIDEO_MAX: parseInt(getEnvConfig('WETALK_VIDEO_MAX', '5')),
-    // 视频间隔（毫秒）
-    VIDEO_DELAY: parseInt(getEnvConfig('WETALK_VIDEO_DELAY', '8000')),
-    // 账号执行间隔（毫秒）
-    ACCOUNT_GAP: parseInt(getEnvConfig('WETALK_ACCOUNT_GAP', '3500'))
-};
+// 配置项
+const ENABLE = getConfig('wetalk_enable', true);
+const CRON_STR = getConfig('wetalk_cron', '20 */4 * * *');
+const MAX_VIDEO = getConfig('wetalk_video_max', 5);
+const VIDEO_DELAY = getConfig('wetalk_video_delay', 8000);
+const ACCOUNT_GAP = getConfig('wetalk_account_gap', 3500);
 
-// IOS设备信息池（原有）
 const IOS_VERSIONS = ['17.5.1','17.6.1','17.4.1','17.2.1','16.7.8','17.6','17.3.1','18.0.1','17.1.2','16.6.1'];
 const IOS_SCALES = ['2.00','3.00','3.00','2.00','3.00'];
 const IPHONE_MODELS = ['iPhone14,3','iPhone13,3','iPhone15,3','iPhone16,1','iPhone14,7','iPhone13,2','iPhone15,2','iPhone12,1'];
 const CFN_VERS = ['1410.0.3','1494.0.7','1568.100.1','1209.1','1474.0.4','1568.200.2'];
 const DARWIN_VERS = ['22.6.0','23.5.0','23.6.0','24.0.0','22.4.0'];
 
-// ==================== 环境适配函数（原有） ====================
 function getPrefsValue(key) {
-    if (isLoon) return $persistentStore.read(key);
-    if (isQuanX) return $prefs.valueForKey(key);
-    return null;
+  if (isLoon) return $persistentStore.read(key);
+  if (isQuanX) return $prefs.valueForKey(key);
+  return null;
 }
-
 function setPrefsValue(key, value) {
-    if (isLoon) $persistentStore.write(value, key);
-    else if (isQuanX) $prefs.setValueForKey(value, key);
+  if (isLoon) $persistentStore.write(value, key);
+  else if (isQuanX) $prefs.setValueForKey(value, key);
 }
-
 function notify(title, body) {
-    if (isLoon) $notification.post(scriptName, title, body);
-    else if (isQuanX) $notify(scriptName, title, body);
+  if (isLoon) $notification.post(scriptName, title, body);
+  else if (isQuanX) $notify(scriptName, title, body);
 }
-
 function httpRequest(options) {
-    return new Promise((resolve, reject) => {
-        if (isLoon) {
-            $httpClient.get(options, (err, resp, body) => {
-                if (err) reject(err);
-                else resolve({ status: resp.statusCode, headers: resp.headers, body });
-            });
-        } else if (isQuanX) {
-            $task.fetch(options).then(resolve).catch(reject);
-        } else {
-            reject('不支持的环境');
-        }
-    });
+  return new Promise((resolve, reject) => {
+    if (isLoon) {
+      $httpClient.get(options, (err, resp, body) => {
+        if (err) reject(err);
+        else resolve({ status: resp.statusCode, headers: resp.headers, body });
+      });
+    } else if (isQuanX) {
+      $task.fetch(options).then(resolve).catch(reject);
+    } else {
+      reject('不支持的环境');
+    }
+  });
 }
 
-// ==================== MD5函数（原有） ====================
+// MD5 完整实现（不省略，不报错）
 function MD5(string) {
   function RotateLeft(lValue, iShiftBits) { return (lValue << iShiftBits) | (lValue >>> (32 - iShiftBits)); }
   function AddUnsigned(lX, lY) {
@@ -110,319 +113,129 @@ function MD5(string) {
     if (lX4 | lY4) return (lResult & 0x40000000) ? (lResult ^ 0xC0000000 ^ lX8 ^ lY8) : (lResult ^ 0x40000000 ^ lX8 ^ lY8);
     return lResult ^ lX8 ^ lY8;
   }
-  function F(x, y, z) { return (x & y) | ((~x) & z); }
-  function G(x, y, z) { return (x & z) | (y & (~z)); }
-  function H(x, y, z) { return x ^ y ^ z; }
-  function I(x, y, z) { return y ^ (x | (~z)); }
-  function FF(a, b, c, d, x, s, ac) { a = AddUnsigned(a, AddUnsigned(AddUnsigned(F(b, c, d), x), ac)); return AddUnsigned(RotateLeft(a, s), b); }
-  function GG(a, b, c, d, x, s, ac) { a = AddUnsigned(a, AddUnsigned(AddUnsigned(G(b, c, d), x), ac)); return AddUnsigned(RotateLeft(a, s), b); }
-  function HH(a, b, c, d, x, s, ac) { a = AddUnsigned(a, AddUnsigned(AddUnsigned(H(b, c, d), x), ac)); return AddUnsigned(RotateLeft(a, s), b); }
-  function II(a, b, c, d, x, s, ac) { a = AddUnsigned(a, AddUnsigned(AddUnsigned(I(b, c, d), x), ac)); return AddUnsigned(RotateLeft(a, s), b); }
-  function ConvertToWordArray(str) {
-    const lMessageLength = str.length;
-    const lNumberOfWords_temp1 = lMessageLength + 8;
-    const lNumberOfWords_temp2 = (lNumberOfWords_temp1 - (lNumberOfWords_temp1 % 64)) / 64;
-    const lNumberOfWords = (lNumberOfWords_temp2 + 1) * 16;
-    const lWordArray = Array(lNumberOfWords - 1).fill(0);
-    let lBytePosition = 0, lByteCount = 0;
-    while (lByteCount < lMessageLength) {
-      const lWordCount = (lByteCount - (lByteCount % 4)) / 4;
-      lBytePosition = (lByteCount % 4) * 8;
-      lWordArray[lWordCount] |= str.charCodeAt(lByteCount) << lBytePosition;
+  function F(x,y,z){return (x&y)|((~x)&z);}
+  function G(x,y,z){return (x&z)|(y&(~z));}
+  function H(x,y,z){return x^y^z;}
+  function I(x,y,z){return y^(x|(~z));}
+  function FF(a,b,c,d,x,s,ac){a=AddUnsigned(a,AddUnsigned(AddUnsigned(F(b,c,d),x),ac));return AddUnsigned(RotateLeft(a,s),b);}
+  function GG(a,b,c,d,x,s,ac){a=AddUnsigned(a,AddUnsigned(AddUnsigned(G(b,c,d),x),ac));return AddUnsigned(RotateLeft(a,s),b);}
+  function HH(a,b,c,d,x,s,ac){a=AddUnsigned(a,AddUnsigned(AddUnsigned(H(b,c,d),x),ac));return AddUnsigned(RotateLeft(a,s),b);}
+  function II(a,b,c,d,x,s,ac){a=AddUnsigned(a,AddUnsigned(AddUnsigned(I(b,c,d),x),ac));return AddUnsigned(RotateLeft(a,s),b);}
+  function ConvertToWordArray(str){
+    const lMessageLength=str.length;
+    const lNumberOfWords_temp1=lMessageLength+8;
+    const lNumberOfWords_temp2=(lNumberOfWords_temp1-(lNumberOfWords_temp1%64))/64;
+    const lNumberOfWords=(lNumberOfWords_temp2+1)*16;
+    const lWordArray=Array(lNumberOfWords-1).fill(0);
+    let lBytePosition=0,lByteCount=0;
+    while(lByteCount<lMessageLength){
+      const lWordCount=(lByteCount-(lByteCount%4))/4;
+      lBytePosition=(lByteCount%4)*8;
+      lWordArray[lWordCount]|=str.charCodeAt(lByteCount)<<lBytePosition;
       lByteCount++;
     }
-    const lWordCount = (lByteCount - (lByteCount % 4)) / 4;
-    lBytePosition = (lByteCount % 4) * 8;
-    lWordArray[lWordCount] |= 0x80 << lBytePosition;
-    lWordArray[lNumberOfWords - 2] = lMessageLength << 3;
-    lWordArray[lNumberOfWords - 1] = lMessageLength >>> 29;
+    const lWordCount=(lByteCount-(lByteCount%4))/4;
+    lBytePosition=(lByteCount%4)*8;
+    lWordArray[lWordCount]|=0x80<<lBytePosition;
+    lWordArray[lNumberOfWords-2]=lMessageLength<<3;
+    lWordArray[lNumberOfWords-1]=lMessageLength>>>29;
     return lWordArray;
   }
-  function WordToHex(lValue) {
-    let WordToHexValue = '';
-    for (let lCount = 0; lCount <= 3; lCount++) {
-      const lByte = (lValue >>> (lCount * 8)) & 255;
-      const WordToHexValue_temp = '0' + lByte.toString(16);
-      WordToHexValue += WordToHexValue_temp.substr(WordToHexValue_temp.length - 2, 2);
+  function WordToHex(lValue){
+    let WordToHexValue='';
+    for(let lCount=0;lCount<=3;lCount++){
+      const lByte=(lValue>>>(lCount*8))&255;
+      const temp='0'+lByte.toString(16);
+      WordToHexValue+=temp.substr(temp.length-2,2);
     }
     return WordToHexValue;
   }
-  const x = ConvertToWordArray(string);
-  let a = 0x67452301, b = 0xEFCDAB89, c = 0x98BADCFE, d = 0x10325476;
-  const S11 = 7, S12 = 12, S13 = 17, S14 = 22, S21 = 5, S22 = 9, S23 = 14, S24 = 20;
-  const S31 = 4, S32 = 11, S33 = 16, S34 = 23, S41 = 6, S42 = 10, S43 = 15, S44 = 21;
-  for (let k = 0; k < x.length; k += 16) {
-    const AA = a, BB = b, CC = c, DD = d;
-    a = FF(a,b,c,d,x[k+0],S11,0xD76AA478); d = FF(d,a,b,c,x[k+1],S12,0xE8C7B756); c = FF(c,d,a,b,x[k+2],S13,0x242070DB); b = FF(b,c,d,a,x[k+3],S14,0xC1BDCEEE);
-    a = FF(a,b,c,d,x[k+4],S11,0xF57C0FAF); d = FF(d,a,b,c,x[k+5],S12,0x4787C62A); c = FF(c,d,a,b,x[k+6],S13,0xA8304613); b = FF(b,c,d,a,x[k+7],S14,0xFD469501);
-    a = FF(a,b,c,d,x[k+8],S11,0x698098D8); d = FF(d,a,b,c,x[k+9],S12,0x8B44F7AF); c = FF(c,d,a,b,x[k+10],S13,0xFFFF5BB1); b = FF(b,c,d,a,x[k+11],S14,0x895CD7BE);
-    a = FF(a,b,c,d,x[k+12],S11,0x6B901122); d = FF(d,a,b,c,x[k+13],S12,0xFD987193); c = FF(c,d,a,b,x[k+14],S13,0xA679438E); b = FF(b,c,d,a,x[k+15],S14,0x49B40821);
-    a = GG(a,b,c,d,x[k+1],S21,0xF61E2562); d = GG(d,a,b,c,x[k+6],S22,0xC040B340); c = GG(c,d,a,b,x[k+11],S23,0x265E5A51); b = GG(b,c,d,a,x[k+0],S24,0xE9B6C7AA);
-    a = GG(a,b,c,d,x[k+5],S21,0xD62F105D); d = GG(d,a,b,c,x[k+10],S22,0x02441453); c = GG(c,d,a,b,x[k+15],S23,0xD8A1E681); b = GG(b,c,d,a,x[k+4],S24,0xE7D3FBC8);
-    a = GG(a,b,c,d,x[k+9],S21,0x21E1CDE6); d = GG(d,a,b,c,x[k+14],S22,0xC33707D6); c = GG(c,d,a,b,x[k+3],S23,0xF4D50D87); b = GG(b,c,d,a,x[k+8],S24,0x455A14ED);
-    a = GG(a,b,c,d,x[k+13],S21,0xA9E3E905); d = GG(d,a,b,c,x[k+2],S22,0xFCEFA3F8); c = GG(c,d,a,b,x[k+7],S23,0x676F02D9); b = GG(b,c,d,a,x[k+12],S24,0x8D2A4C8A);
-    a = HH(a,b,c,d,x[k+5],S31,0xFFFA3942); d = HH(d,a,b,c,x[k+8],S32,0x8771F681); c = HH(c,d,a,b,x[k+11],S33,0x6D9D6122); b = HH(b,c,d,a,x[k+14],S34,0xFDE5380C);
-    a = HH(a,b,c,d,x[k+1],S31,0xA4BEEA44); d = HH(d,a,b,c,x[k+4],S32,0x4BDECFA9); c = HH(c,d,a,b,x[k+7],S33,0xF6BB4B60); b = HH(b,c,d,a,x[k+10],S34,0xBEBFBC70);
-    a = HH(a,b,c,d,x[k+13],S31,0x289B7EC6); d = HH(d,a,b,c,x[k+0],S32,0xEAA127FA); c = HH(c,d,a,b,x[k+3],S33,0xD4EF3085); b = HH(b,c,d,a,x[k+6],S34,0x04881D05);
-    a = HH(a,b,c,d,x[k+9],S31,0xD9D4D039); d = HH(d,a,b,c,x[k+12],S32,0xE6DB99E5); c = HH(c,d,a,b,x[k+15],S33,0x1FA27CF8); b = HH(b,c,d,a,x[k+2],S34,0xC4AC5665);
-    a = II(a,b,c,d,x[k+0],S41,0xF4292244); d = II(d,a,b,c,x[k+7],S42,0x432AFF97); c = II(c,d,a,b,x[k+14],S43,0xAB9423A7); b = II(b,c,d,a,x[k+5],S44,0xFC93A039);
-    a = II(a,b,c,d,x[k+12],S41,0x655B59C3); d = II(d,a,b,c,x[k+3],S42,0x8F0CCC92); c = II(c,d,a,b,x[k+10],S43,0xFFEFF47D); b = II(b,c,d,a,x[k+1],S44,0x85845DD1);
-    a = II(a,b,c,d,x[k+8],S41,0x6FA87E4F); d = II(d,a,b,c,x[k+15],S42,0xFE2CE6E0); c = II(c,d,a,b,x[k+6],S43,0xA3014314); b = II(b,c,d,a,x[k+13],S44,0x4E0811A1);
-    a = II(a,b,c,d,x[k+4],S41,0xF7537E82); d = II(d,a,b,c,x[k+11],S42,0xBD3AF235); c = II(c,d,a,b,x[k+2],S43,0x2AD7D2BB); b = II(b,c,d,a,x[k+9],S44,0xEB86D391);
-    a = AddUnsigned(a,AA); b = AddUnsigned(b,BB); c = AddUnsigned(c,CC); d = AddUnsigned(d,DD);
+  const x=ConvertToWordArray(string);
+  let a=0x67452301,b=0xEFCDAB89,c=0x98BADCFE,d=0x10325476;
+  const S11=7,S12=12,S13=17,S14=22,S21=5,S22=9,S23=14,S24=20;
+  const S31=4,S32=11,S33=16,S34=23,S41=6,S42=10,S43=15,S44=21;
+  for(let k=0;k<x.length;k+=16){
+    const AA=a,BB=b,CC=c,DD=d;
+    a=FF(a,b,c,d,x[k+0],S11,0xD76AA478);d=FF(d,a,b,c,x[k+1],S12,0xE8C7B756);c=FF(c,d,a,b,x[k+2],S13,0x242070DB);b=FF(b,c,d,a,x[k+3],S14,0xC1BDCEEE);
+    a=FF(a,b,c,d,x[k+4],S11,0xF57C0FAF);d=FF(d,a,b,c,x[k+5],S12,0x4787C62A);c=FF(c,d,a,b,x[k+6],S13,0xA8304613);b=FF(b,c,d,a,x[k+7],S14,0xFD469501);
+    a=FF(a,b,c,d,x[k+8],S11,0x698098D8);d=FF(d,a,b,c,x[k+9],S12,0x8B44F7AF);c=FF(c,d,a,b,x[k+10],S13,0xFFFF5BB1);b=FF(b,c,d,a,x[k+11],S14,0x895CD7BE);
+    a=FF(a,b,c,d,x[k+12],S11,0x6B901122);d=FF(d,a,b,c,x[k+13],S12,0xFD987193);c=FF(c,d,a,b,x[k+14],S13,0xA679438E);b=FF(b,c,d,a,x[k+15],S14,0x49B40821);
+    a=GG(a,b,c,d,x[k+1],S21,0xF61E2562);d=GG(d,a,b,c,x[k+6],S22,0xC040B340);c=GG(c,d,a,b,x[k+11],S23,0x265E5A51);b=GG(b,c,d,a,x[k+0],S24,0xE9B6C7AA);
+    a=GG(a,b,c,d,x[k+5],S21,0xD62F105D);d=GG(d,a,b,c,x[k+10],S22,0x02441453);c=GG(c,d,a,b,x[k+15],S23,0xD8A1E681);b=GG(b,c,d,a,x[k+4],S24,0xE7D3FBC8);
+    a=GG(a,b,c,d,x[k+9],S21,0x21E1CDE6);d=GG(d,a,b,c,x[k+14],S22,0xC33707D6);c=GG(c,d,a,b,x[k+3],S23,0xF4D50D87);b=GG(b,c,d,a,x[k+8],S24,0x455A14ED);
+    a=GG(a,b,c,d,x[k+13],S21,0xA9E3E905);d=GG(d,a,b,c,x[k+2],S22,0xFCEFA3F8);c=GG(c,d,a,b,x[k+7],S23,0x676F02D9);b=GG(b,c,d,a,x[k+12],S24,0x8D2A4C8A);
+    a=HH(a,b,c,d,x[k+5],S31,0xFFFA3942);d=HH(d,a,b,c,x[k+8],S32,0x8771F681);c=HH(c,d,a,b,x[k+11],S33,0x6D9D6122);b=HH(b,c,d,a,x[k+14],S34,0xFDE5380C);
+    a=HH(a,b,c,d,x[k+1],S31,0xA4BEEA44);d=HH(d,a,b,c,x[k+4],S32,0x4BDECFA9);c=HH(c,d,a,b,x[k+7],S33,0xF6BB4B60);b=HH(b,c,d,a,x[k+10],S34,0xBEBFBC70);
+    a=HH(a,b,c,d,x[k+13],S31,0x289B7EC6);d=HH(d,a,b,c,x[k+0],S32,0xEAA127FA);c=HH(c,d,a,b,x[k+3],S33,0xD4EF3085);b=HH(b,c,d,a,x[k+6],S34,0x04881D05);
+    a=HH(a,b,c,d,x[k+9],S31,0xD9D4D039);d=HH(d,a,b,c,x[k+12],S32,0xE6DB99E5);c=HH(c,d,a,b,x[k+15],S33,0x1FA27CF8);b=HH(b,c,d,a,x[k+2],S34,0xC4AC5665);
+    a=II(a,b,c,d,x[k+0],S41,0xF4292244);d=II(d,a,b,c,x[k+7],S42,0x432AFF97);c=II(c,d,a,b,x[k+14],S43,0xAB9423A7);b=II(b,c,d,a,x[k+5],S44,0xFC93A039);
+    a=II(a,b,c,d,x[k+12],S41,0x655B59C3);d=II(d,a,b,c,x[k+3],S42,0x8F0CCC92);c=II(c,d,a,b,x[k+10],S43,0xFFEFF47D);b=II(b,c,d,a,x[k+1],S44,0x85845DD1);
+    a=II(a,b,c,d,x[k+8],S41,0x6FA87E4F);d=II(d,a,b,c,x[k+15],S42,0xFE2CE6E0);c=II(c,d,a,b,x[k+6],S43,0xA3014314);b=II(b,c,d,a,x[k+13],S44,0x4E0811A1);
+    a=II(a,b,c,d,x[k+4],S41,0xF7537E82);d=II(d,a,b,c,x[k+11],S42,0xBD3AF235);c=II(c,d,a,b,x[k+2],S43,0x2AD7D2BB);b=II(b,c,d,a,x[k+9],S44,0xEB86D391);
+    a=AddUnsigned(a,AA);b=AddUnsigned(b,BB);c=AddUnsigned(c,CC);d=AddUnsigned(d,DD);
   }
-  return (WordToHex(a) + WordToHex(b) + WordToHex(c) + WordToHex(d)).toLowerCase();
+  return (WordToHex(a)+WordToHex(b)+WordToHex(c)+WordToHex(d)).toLowerCase();
 }
 
-// ==================== 工具函数（原有） ====================
-function getUTCSignDate() {
-  const now = new Date();
-  const pad = n => String(n).padStart(2, '0');
+function getUTCSignDate(){
+  const now=new Date();
+  const pad=n=>String(n).padStart(2,'0');
   return `${now.getUTCFullYear()}-${pad(now.getUTCMonth()+1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())}`;
 }
+function normalizeHeaderNameMap(headers){const out={};Object.keys(headers||{}).forEach(k=>out[k]=headers[k]);return out;}
+function parseRawQuery(url){const q=(url.split('?')[1]||'').split('#')[0];const m={};q.split('&').forEach(p=>{if(!p)return;const i=p.indexOf('=');if(i<0)return;m[p.slice(0,i)]=p.slice(i+1);});return m;}
+function fingerprintOf(p){const d={sign:1,signDate:1,timestamp:1,ts:1,nonce:1,random:1,reqTime:1,reqId:1,requestId:1};return MD5(Object.keys(p||{}).filter(k=>!d[k]).sort().map(k=>`${k}=${p[k]}`).join('&')).slice(0,12);}
+function loadStore(){const r=getPrefsValue(storeKey);if(!r)return{version:1,accounts:{},order:[]};try{const o=JSON.parse(r);o.accounts=o.accounts||{};o.order=Array.isArray(o.order)?o.order:Object.keys(o.accounts);return o;}catch(e){return{version:1,accounts:{},order:[]};}}
+function saveStore(s){setPrefsValue(storeKey,JSON.stringify(s));}
+function pickItem(a,s){return a[s%a.length];}
+function buildUA(ua,s){const v=pickItem(IOS_VERSIONS,s);const sc=pickItem(IOS_SCALES,s+1);const m=pickItem(IPHONE_MODELS,s+2);const c=pickItem(CFN_VERS,s+3);const d=pickItem(DARWIN_VERS,s+4);if(ua&&typeof ua==='string'){let r=ua;let f=false;if(/iOS \d+(\.\d+){0,2}/.test(r)){r=r.replace(/iOS \d+(\.\d+){0,2}/,`iOS ${v}`);f=true;}if(/Scale\/\d+(\.\d+)?/.test(r)){r=r.replace(/Scale\/\d+(\.\d+)?/,`Scale/${sc}`);f=true;}if(/iPhone\d+,\d+/.test(r)){r=r.replace(/iPhone\d+,\d+/,m);f=true;}if(/CFNetwork\/[\d.]+/.test(r)){r=r.replace(/CFNetwork\/[\d.]+/,`CFNetwork/${c}`);f=true;}if(/Darwin\/[\d.]+/.test(r)){r=r.replace(/Darwin\/[\d.]+/,`Darwin/${d}`);f=true;}if(f)return r;}return `WeTalk/30.6.0 (com.innovationworks.wetalk; build:28; iOS ${v}) Alamofire/5.4.3`;}
+function buildSignedParamsRaw(c){const p={};Object.keys(c.paramsRaw||{}).forEach(k=>{if(k!=='sign'&&k!=='signDate')p[k]=c.paramsRaw[k];});p.signDate=getUTCSignDate();const b=Object.keys(p).sort().map(k=>`${k}=${p[k]}`).join('&');p.sign=MD5(b+SECRET);return p;}
+function buildUrl(path,c){const p=buildSignedParamsRaw(c);const q=Object.keys(p).map(k=>`${k}=${encodeURIComponent(p[k])}`).join('&');return`https://${API_HOST}/app/${path}?${q}`;}
+function cloneHeaders(h){const o={};Object.keys(h||{}).forEach(k=>o[k]=h[k]);return o;}
+function buildHeaders(c,ua){const h=cloneHeaders(c.headers||{});delete h['Content-Length'];delete h['content-length'];delete h[':authority'];delete h[':method'];delete h[':path'];delete h[':scheme'];h.Host=API_HOST;h.Accept=h.Accept||'application/json';Object.keys(h).forEach(k=>{if(k.toLowerCase()==='user-agent')delete h[k];});h['User-Agent']=ua;return h;}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 
-function normalizeHeaderNameMap(headers) {
-  const out = {};
-  Object.keys(headers || {}).forEach(k => out[k] = headers[k]);
-  return out;
-}
-
-function parseRawQuery(url) {
-  const query = (url.split('?')[1] || '').split('#')[0];
-  const rawMap = {};
-  query.split('&').forEach(pair => {
-    if (!pair) return;
-    const idx = pair.indexOf('=');
-    if (idx < 0) return;
-    const k = pair.slice(0, idx);
-    const v = pair.slice(idx + 1);
-    rawMap[k] = v;
-  });
-  return rawMap;
-}
-
-function fingerprintOf(paramsRaw) {
-  const drop = { sign:1, signDate:1, timestamp:1, ts:1, nonce:1, random:1, reqTime:1, reqId:1, requestId:1 };
-  const base = Object.keys(paramsRaw || {}).filter(k => !drop[k]).sort().map(k => `${k}=${paramsRaw[k]}`).join('&');
-  return MD5(base).slice(0, 12);
-}
-
-function loadStore() {
-  const raw = getPrefsValue(storeKey);
-  if (!raw) return { version: 1, accounts: {}, order: [] };
-  try {
-    const obj = JSON.parse(raw);
-    if (!obj.accounts) obj.accounts = {};
-    if (!Array.isArray(obj.order)) obj.order = Object.keys(obj.accounts);
-    return obj;
-  } catch (e) {
-    return { version: 1, accounts: {}, order: [] };
-  }
-}
-
-function saveStore(store) {
-  setPrefsValue(storeKey, JSON.stringify(store));
-}
-
-function pickItem(arr, seed) {
-  return arr[seed % arr.length];
-}
-
-function buildUA(baseUA, seed) {
-  const iosVer = pickItem(IOS_VERSIONS, seed);
-  const scale = pickItem(IOS_SCALES, seed + 1);
-  const model = pickItem(IPHONE_MODELS, seed + 2);
-  const cfn = pickItem(CFN_VERS, seed + 3);
-  const darwin = pickItem(DARWIN_VERS, seed + 4);
-  if (baseUA && typeof baseUA === 'string') {
-    let ua = baseUA;
-    let changed = false;
-    if (/iOS \d+(\.\d+){0,2}/.test(ua)) { ua = ua.replace(/iOS \d+(\.\d+){0,2}/, `iOS ${iosVer}`); changed = true; }
-    if (/Scale\/\d+(\.\d+)?/.test(ua)) { ua = ua.replace(/Scale\/\d+(\.\d+)?/, `Scale/${scale}`); changed = true; }
-    if (/iPhone\d+,\d+/.test(ua)) { ua = ua.replace(/iPhone\d+,\d+/, model); changed = true; }
-    if (/CFNetwork\/[\d.]+/.test(ua)) { ua = ua.replace(/CFNetwork\/[\d.]+/, `CFNetwork/${cfn}`); changed = true; }
-    if (/Darwin\/[\d.]+/.test(ua)) { ua = ua.replace(/Darwin\/[\d.]+/, `Darwin/${darwin}`); changed = true; }
-    if (changed) return ua;
-  }
-  return `WeTalk/30.6.0 (com.innovationworks.wetalk; build:28; iOS ${iosVer}) Alamofire/5.4.3`;
-}
-
-function buildSignedParamsRaw(capture) {
-  const params = {};
-  Object.keys(capture.paramsRaw || {}).forEach(k => {
-    if (k !== 'sign' && k !== 'signDate') params[k] = capture.paramsRaw[k];
-  });
-  params.signDate = getUTCSignDate();
-  const signBase = Object.keys(params).sort().map(k => `${k}=${params[k]}`).join('&');
-  params.sign = MD5(signBase + SECRET);
-  return params;
-}
-
-function buildUrl(path, capture) {
-  const params = buildSignedParamsRaw(capture);
-  const qs = Object.keys(params).map(k => `${k}=${encodeURIComponent(params[k])}`).join('&');
-  return `https://${API_HOST}/app/${path}?${qs}`;
-}
-
-function cloneHeaders(headers) {
-  const out = {};
-  Object.keys(headers || {}).forEach(k => out[k] = headers[k]);
-  return out;
-}
-
-function buildHeaders(capture, ua) {
-  const headers = cloneHeaders(capture.headers || {});
-  delete headers['Content-Length']; delete headers['content-length'];
-  delete headers[':authority']; delete headers[':method']; delete headers[':path']; delete headers[':scheme'];
-  headers['Host'] = API_HOST;
-  headers['Accept'] = headers['Accept'] || 'application/json';
-  Object.keys(headers).forEach(k => { if (k.toLowerCase() === 'user-agent') delete headers[k]; });
-  headers['User-Agent'] = ua;
-  return headers;
-}
-
-function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
-}
-
-// ==================== 执行账号任务（修改：使用CONFIG配置） ====================
-function runAccount(acc, index, total) {
-  const tag = `[账号${index+1}/${total} ${acc.alias || acc.id}]`;
-  const ua = buildUA(acc.baseUA, acc.uaSeed);
-  const headers = buildHeaders(acc.capture, ua);
-  const msgs = [tag];
-
-  function fetchApi(path) {
-    const url = buildUrl(path, acc.capture);
-    return httpRequest({ url, method: 'GET', headers });
-  }
-
-  function doVideoLoop(count) {
-    let i = 0;
-    function next() {
-      if (i >= count) return Promise.resolve();
-      return new Promise(resolve => {
-        setTimeout(() => {
-          i++;
-          fetchApi('videoBonus').then(res => {
-            try {
-              const d = JSON.parse(res.body);
-              if (d.retcode === 0) {
-                msgs.push(`🎬 视频${i}：+${d.result?.bonus || '?'} Coins`);
-                resolve(next());
-              } else {
-                msgs.push(`⏸ 视频${i}：${d.retmsg}`);
-                resolve();
-              }
-            } catch (e) {
-              msgs.push(`❌ 视频${i}：解析失败`);
-              resolve();
-            }
-          }).catch(err => {
-            msgs.push(`❌ 视频${i}：${err.error || '请求失败'}`);
-            resolve();
-          });
-        }, i === 0 ? 1500 : CONFIG.VIDEO_DELAY); // 使用配置的视频间隔
-      });
-    }
-    return next();
-  }
-
-  return fetchApi('queryBalanceAndBonus').then(res => {
-    try {
-      const d = JSON.parse(res.body);
-      if (d.retcode === 0) msgs.push(`💰 余额：${d.result.balance} Coins`);
-      else msgs.push(`⚠️ 查询：${d.retmsg}`);
-    } catch (e) { msgs.push('❌ 查询：解析失败'); }
+function runAccount(acc,i,t){
+  const tag=`[账号${i+1}/${t} ${acc.alias||acc.id}]`;
+  const ua=buildUA(acc.baseUA,acc.uaSeed);
+  const headers=buildHeaders(acc.capture,ua);
+  const msgs=[tag];
+  const fetchApi=p=>httpRequest({url:buildUrl(p,acc.capture),method:'GET',headers});
+  function loop(){let n=0;function next(){if(n>=MAX_VIDEO)return Promise.resolve();return new Promise(r=>{setTimeout(()=>{n++;fetchApi('videoBonus').then(rsp=>{try{const d=JSON.parse(rsp.body);if(d.retcode===0)msgs.push(`🎬 视频${n}：+${d.result?.bonus||'?'}`);else msgs.push(`⏸ 视频${n}：${d.retmsg}`);}catch(e){msgs.push(`❌ 视频${n}：解析失败`);}finally{next().then(r);}},()=>{msgs.push(`❌ 视频${n}：请求失败`);next().then(r);}},n===0?1500:VIDEO_DELAY);});}return next();}
+  return fetchApi('queryBalanceAndBonus').then(rsp=>{
+    try{const d=JSON.parse(rsp.body);if(d.retcode===0)msgs.push(`💰 余额：${d.result.balance}`);else msgs.push(`⚠️ 查询：${d.retmsg}`);}catch(e){msgs.push('❌ 查询失败');}
     return fetchApi('checkIn');
-  }).then(res => {
-    try {
-      const d = JSON.parse(res.body);
-      if (d.retcode === 0) msgs.push(`✅ 签到：${(d.result?.bonusHint || d.retmsg || '').replace(/\n/g, ' ')}`);
-      else msgs.push(`⚠️ 签到：${d.retmsg}`);
-    } catch (e) { msgs.push('❌ 签到：解析失败'); }
-    return doVideoLoop(CONFIG.VIDEO_MAX); // 使用配置的最大视频次数
-  }).then(() => fetchApi('queryBalanceAndBonus')).then(res => {
-    try {
-      const d = JSON.parse(res.body);
-      if (d.retcode === 0) msgs.push(`💰 最新余额：${d.result.balance} Coins`);
-    } catch (e) {}
+  }).then(rsp=>{
+    try{const d=JSON.parse(rsp.body);if(d.retcode===0)msgs.push(`✅ 签到成功`);else msgs.push(`⚠️ 签到：${d.retmsg}`);}catch(e){msgs.push('❌ 签到失败');}
+    return loop();
+  }).then(()=>fetchApi('queryBalanceAndBonus')).then(rsp=>{
+    try{const d=JSON.parse(rsp.body);if(d.retcode===0)msgs.push(`💰 最终：${d.result.balance}`);}catch(e){}
     return msgs.join('\n');
-  }).catch(err => {
-    msgs.push(`❌ 异常：${err.error || String(err)}`);
-    return msgs.join('\n');
-  });
+  }).catch(e=>msgs.push(`❌ 异常：${e.message||e}`));
 }
 
-// ==================== 主流程（新增：Token开关判断） ====================
-if (typeof $request !== 'undefined' && $request) {
-  // === 抓包保存账号参数（不受Token开关控制） ===
-  const paramsRaw = parseRawQuery($request.url);
-  const headersMap = normalizeHeaderNameMap($request.headers || {});
-  let baseUA = '';
-  Object.keys(headersMap).forEach(k => { if (k.toLowerCase() === 'user-agent') baseUA = headersMap[k]; });
-
-  const store = loadStore();
-  const fp = fingerprintOf(paramsRaw);
-  const now = Date.now();
-  const existed = !!store.accounts[fp];
-  const uaSeed = existed ? store.accounts[fp].uaSeed : store.order.length;
-  const alias = existed ? store.accounts[fp].alias : `账号${store.order.length + 1}`;
-
-  store.accounts[fp] = {
-    id: fp,
-    alias,
-    uaSeed,
-    baseUA,
-    capture: { url: $request.url, paramsRaw, headers: headersMap },
-    createdAt: existed ? store.accounts[fp].createdAt : now,
-    updatedAt: now
-  };
-  if (!existed) store.order.push(fp);
+if(typeof $request!=='undefined'&&$request){
+  const p=parseRawQuery($request.url);
+  const h=normalizeHeaderNameMap($request.headers||{});
+  let ua='';Object.keys(h).forEach(k=>{if(k.toLowerCase()==='user-agent')ua=h[k];});
+  const store=loadStore();
+  const fp=fingerprintOf(p);
+  const now=Date.now();
+  const exist=!!store.accounts[fp];
+  const seed=exist?store.accounts[fp].uaSeed:store.order.length;
+  const alias=exist?store.accounts[fp].alias:`账号${store.order.length+1}`;
+  store.accounts[fp]={id:fp,alias,uaSeed,baseUA:ua,capture:{url:$request.url,paramsRaw:p,headers:h},createdAt:exist?store.accounts[fp].createdAt:now,updatedAt:now};
+  if(!exist)store.order.push(fp);
   saveStore(store);
-
-  const total = store.order.length;
-  notify(existed ? '🔄 账号参数已更新' : '✅ 新账号已入库', `${alias}（id:${fp}）\n当前账号总数：${total}`);
-  console.log(`【${scriptName}】${existed ? 'update' : 'add'} account ${fp}`);
+  notify(exist?'更新账号':'新增账号',`${alias} | 总数：${store.order.length}`);
   $done({});
 } else {
-  // === 执行定时任务（新增：Token开关控制） ===
-  if (!CONFIG.TOKEN_SWITCH) {
-    // Token开关关闭时直接结束
-    notify('🔴 脚本已禁用', `Token开关：关闭\n当前定时器配置：${CONFIG.CRON_CONFIG}`);
-    $done();
-    return;
-  }
-
-  // Token开关开启时执行原有逻辑
-  const store = loadStore();
-  const ids = store.order.filter(id => store.accounts[id]);
-  if (!ids.length) {
-    notify('⚠️ 未抓到任何账号', `Token开关：开启\n定时器配置：${CONFIG.CRON_CONFIG}\n请先打开 WeTalk 触发抓包`);
-    $done();
-  } else {
-    const total = ids.length;
-    const results = [];
-    let chain = Promise.resolve();
-    // 打印当前配置信息
-    results.push(`⚙️ 当前配置：
-Token开关：${CONFIG.TOKEN_SWITCH ? '开启' : '关闭'}
-定时器：${CONFIG.CRON_CONFIG}
-最大视频次数：${CONFIG.VIDEO_MAX}
-视频间隔：${CONFIG.VIDEO_DELAY}ms
-账号间隔：${CONFIG.ACCOUNT_GAP}ms`);
-    
-    ids.forEach((id, idx) => {
-      chain = chain.then(() => runAccount(store.accounts[id], idx, total))
-        .then(text => { results.push(text); })
-        .then(() => idx < ids.length - 1 ? sleep(CONFIG.ACCOUNT_GAP) : null); // 使用配置的账号间隔
-    });
-    chain.then(() => {
-      notify(`🎉 全部完成 (${total}个账号)`, results.join('\n———\n'));
-      $done();
-    }).catch(err => {
-      notify('❌ 任务异常', results.join('\n———\n') + '\n' + (err.error || String(err)));
-      $done();
-    });
-  }
+  if(!ENABLE){notify('🔴 脚本已关闭',`配置中已禁用`);$done();return;}
+  const store=loadStore();
+  const ids=store.order.filter(id=>store.accounts[id]);
+  if(!ids.length){notify('⚠️ 无账号','请先打开WeTalk抓包');$done();return;}
+  const res=[];
+  let q=Promise.resolve();
+  ids.forEach((id,i)=>{q=q.then(()=>runAccount(store.accounts[id],i,ids.length)).then(t=>res.push(t)).then(()=>i<ids.length-1?sleep(ACCOUNT_GAP):null);});
+  q.then(()=>{notify(`🎉 完成 ${ids.length} 账号`,res.join('\n———\n'));$done();}).catch(e=>{notify('❌ 任务失败',e.message||e);$done();});
 }
