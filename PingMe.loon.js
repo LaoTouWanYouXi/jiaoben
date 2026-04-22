@@ -1,25 +1,98 @@
-// 2026/04/20
 /*
-@Name：PingMe 自动化签到+视频奖励 (Loon版 - 已优化)
+@Name：PingMe 自动化签到+视频奖励 (Loon版)
 @Author：怎么肥事 (适配+优化 by Grok)
+@Desc：PingMe App 自动签到领金币，支持多账号
+@Date：2026/04/20 18:30
 
-【Loon 配置示例】直接复制到 Loon → 脚本（Script）区域：
+------------------------------------------
+【Loon 插件配置说明】
+
+1. 作为插件使用时，复制以下内容到 Loon → 配置 → 插件 → 添加插件
+2. 填入脚本托管地址，然后在插件设置中配置参数
+
+------------------------------------------
+# 插件配置示例：
+
+[Argument]
+# 定时签到时间（cron表达式，格式：分 时 日 月 周）
+cronExpr = input,"20 0/4 * * *",tag=定时签到时间,desc=每4小时执行一次，20分触发
+
+# 是否开启抓包获取Token
+captureToken = switch,true,tag=抓取Token开关,desc=开启后打开PingMe App可自动抓取账号信息
 
 [Script]
-# PingMe 抓包保存账号参数（打开 PingMe App 触发 queryBalanceAndBonus 接口即可）
-http-request ^https:\/\/api\.pingmeapp\.net\/app\/queryBalanceAndBonus script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/PingMe.loon.js, timeout=60, tag=PingMe抓包
+# 抓包保存账号参数（需开启抓取Token开关）
+http-request ^https:\/\/api\.pingmeapp\.net\/app\/queryBalanceAndBonus script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/main/PingMe.loon.js, timeout=60, tag=PingMe抓包, argument=(captureToken)
 
-# PingMe 自动签到 + 视频奖励（每4小时运行一次）
-cron "20 */4 * * *" script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/PingMe.loon.js, tag=PingMe签到, wake-system=1
+# 定时签到任务
+cron {cronExpr} script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/main/PingMe.loon.js, tag=PingMe签到, wake-system=1
 
 [MITM]
 hostname = api.pingmeapp.net
+
+------------------------------------------
 */
+
+const scriptName = 'PingMe';
+
+// ==================== 参数配置 ====================
+// Loon Argument 参数解析
+function getArg(name, defaultVal = '') {
+    if (typeof $argument !== 'undefined' && $argument) {
+        // 处理裸布尔值（Loon switch 传递的格式）
+        if ($argument === true) return 'true';
+        if ($argument === false) return 'false';
+
+        // 如果是纯字符串（不是JSON，也不是key=value格式），直接返回
+        // 这种情况用于 cron 表达式: "20 0/4 * * *"
+        if (typeof $argument === 'string') {
+            // 不是 key=value 格式，直接返回原值
+            if (!$argument.includes('=') && !$argument.includes('{')) {
+                return $argument;
+            }
+            // 处理字符串 true/false
+            if ($argument === 'true') return 'true';
+            if ($argument === 'false') return 'false';
+        }
+
+        try {
+            const args = JSON.parse($argument);
+            // 如果解析后是布尔值，直接返回
+            if (typeof args === 'boolean') return args ? 'true' : 'false';
+            // 如果解析后是对象，取对应字段
+            if (typeof args === 'object' && args !== null) {
+                return args[name] !== undefined ? args[name] : defaultVal;
+            }
+        } catch (e) {
+            // 字符串格式解析: "key1=value1&key2=value2"
+            const pairs = $argument.split('&');
+            for (const pair of pairs) {
+                const idx = pair.indexOf('=');
+                if (idx > 0) {
+                    const k = pair.slice(0, idx);
+                    const v = pair.slice(idx + 1);
+                    if (k === name) return decodeURIComponent(v || '');
+                }
+            }
+        }
+    }
+    return defaultVal;
+}
+
+// 配置项
+const CONFIG = {
+    // 是否开启抓包（从Argument读取，默认为true）
+    captureEnabled: getArg('captureToken', 'true') === 'true',
+    // 定时表达式（仅用于显示，实际由Loon的cron控制）
+    cronExpr: getArg('cronExpr', '20 0/4 * * *')
+};
+
+// 调试输出当前配置
+console.log(`[${scriptName}] 原始参数: ${JSON.stringify($argument)}`);
+console.log(`[${scriptName}] 配置加载: 抓包开关=${CONFIG.captureEnabled}, 定时规则=${CONFIG.cronExpr}`);
 
 const isLoon = typeof $persistentStore !== 'undefined';
 const isQuanX = typeof $task !== 'undefined';
-
-const scriptName = 'PingMe';
 const storeKey = 'pingme_accounts_v1';
 const SECRET = '0fOiukQq7jXZV2GRi9LGlO';
 const MAX_VIDEO = 5;
@@ -249,6 +322,17 @@ function sleep(ms) {
 }
 
 // ==================== 执行单个账号任务 ====================
+// 格式化下次运行时间
+function getNextRunTime() {
+    try {
+        const parts = CONFIG.cronExpr.split(' ');
+        if (parts.length === 5) {
+            return `下次执行: ${parts[1] !== '*' ? parts[1] : '每'}时${parts[0] !== '*' ? parts[0] : ''}分`;
+        }
+    } catch (e) {}
+    return `定时规则: ${CONFIG.cronExpr}`;
+}
+
 function runAccount(acc, index, total) {
   const tag = `[账号${index+1}/${total} ${acc.alias || acc.id}]`;
   const ua = buildUA(acc.baseUA, acc.uaSeed);
@@ -320,11 +404,18 @@ function runAccount(acc, index, total) {
 // ==================== 主流程 ====================
 if (typeof $request !== 'undefined' && $request) {
   // === 抓包保存账号参数（已优化：避免重复触发）===
+  // 检查抓包开关
+  if (!CONFIG.captureEnabled) {
+    console.log(`[${scriptName}] 抓包开关已关闭，跳过抓包`);
+    $done({});
+    return;
+  }
+
   const paramsRaw = parseRawQuery($request.url);
   const headersMap = normalizeHeaderNameMap($request.headers || {});
   let baseUA = '';
-  Object.keys(headersMap).forEach(k => { 
-    if (k.toLowerCase() === 'user-agent') baseUA = headersMap[k]; 
+  Object.keys(headersMap).forEach(k => {
+    if (k.toLowerCase() === 'user-agent') baseUA = headersMap[k];
   });
 
   const store = loadStore();
@@ -355,9 +446,10 @@ if (typeof $request !== 'undefined' && $request) {
   saveStore(store);
 
   const total = store.order.length;
-  notify('✅ 新账号已入库', `${alias}（id:${fp}）\n当前账号总数：${total}`);
+  const configInfo = `⏰ ${getNextRunTime()} | 账号数:${total}`;
+  notify('✅ 新账号已入库', `${alias}（id:${fp}）\n${configInfo}`);
   console.log(`【${scriptName}】新增账号 ${fp}`);
-  
+
   $done({});
 } else {
   // === 执行定时签到任务 ===
@@ -376,7 +468,8 @@ if (typeof $request !== 'undefined' && $request) {
         .then(() => idx < ids.length - 1 ? sleep(ACCOUNT_GAP) : null);
     });
     chain.then(() => {
-      notify(`🎉 全部完成 (${total}个账号)`, results.join('\n———\n'));
+      const configInfo = `⏰ ${getNextRunTime()} | 🔍 抓包:${CONFIG.captureEnabled ? '开' : '关'}`;
+      notify(`🎉 全部完成 (${total}个账号)`, configInfo + '\n———\n' + results.join('\n———\n'));
       $done();
     }).catch(err => {
       notify('❌ 任务异常', results.join('\n———\n') + '\n' + (err.error || String(err)));
