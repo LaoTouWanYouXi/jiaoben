@@ -10,7 +10,7 @@
 http-request ^https:\/\/api\.pingmeapp\.net\/app\/queryBalanceAndBonus script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/PingMe.loon.js, timeout=60, tag=PingMe抓包
 
 # PingMe 自动签到 + 视频奖励（每4小时运行一次）
-cron "20 0/4 * * *" script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/PingMe.loon.js, tag=PingMe签到, wake-system=1
+cron "20 0/6 * * *" script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/PingMe.loon.js, tag=PingMe签到, wake-system=1
 
 [MITM]
 hostname = api.pingmeapp.net
