@@ -11,7 +11,7 @@ Loon 配置示例（直接复制到 Loon → 插件 或 脚本）：
 http-request ^https:\/\/api\.wetalkapp\.com\/app\/queryBalanceAndBonus script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/wetalk.js, timeout=60, tag=WeTalk抓包
 
 # 定时签到任务（自定义cron表达式，示例：每4小时20分执行）
-cron "20 */4 * * *" script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/wetalk.js, tag=WeTalk签到, wake-system=1, env={"WETALK_TOKEN_SWITCH":"true","WETALK_CRON_CONFIG":"20 */4 * * *","WETALK_VIDEO_MAX":"5","WETALK_VIDEO_DELAY":"8000"}
+cron "20 */4 * * *" script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/wetalk.js, tag=WeTalk签到
 
 [MITM]
 hostname = api.wetalkapp.com
