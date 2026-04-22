@@ -2,7 +2,7 @@
 @Name：PingMe 自动化签到+视频奖励 (Loon版)
 @Author：怎么肥事 (适配+优化 by Grok)
 @Desc：PingMe App 自动签到领金币，支持多账号
-@Date：2026/04/20 18:30
+@Date：2026/04/20 19:05
 
 ------------------------------------------
 【Loon 插件配置说明】
@@ -38,7 +38,7 @@ const scriptName = 'PingMe';
 // ==================== 参数配置 ====================
 // Loon Argument 参数解析
 function getArg(name, defaultVal = '') {
-    if (typeof $argument !== 'undefined' && $argument) {
+    if (typeof $argument !== 'undefined' && $argument !== null && $argument !== '') {
         // 处理裸布尔值（Loon switch 传递的格式）
         if ($argument === true) return 'true';
         if ($argument === false) return 'false';
@@ -88,7 +88,7 @@ const CONFIG = {
 };
 
 // 调试输出当前配置
-console.log(`[${scriptName}] 原始参数: ${JSON.stringify($argument)}`);
+console.log(`[${scriptName}] 原始参数: ${typeof $argument !== 'undefined' ? JSON.stringify($argument) : 'undefined'}`);
 console.log(`[${scriptName}] 配置加载: 抓包开关=${CONFIG.captureEnabled}, 定时规则=${CONFIG.cronExpr}`);
 
 const isLoon = typeof $persistentStore !== 'undefined';
