@@ -22,10 +22,10 @@ captureToken = switch,true,tag=抓取Token开关,desc=开启后打开PingMe App�
 
 [Script]
 # 抓包保存账号参数（需开启抓取Token开关）
-http-request ^https:\/\/api\.pingmeapp\.net\/app\/queryBalanceAndBonus script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/main/PingMe.loon.js, timeout=60, tag=PingMe抓包, argument=(captureToken)
+http-request ^https:\/\/api\.pingmeapp\.net\/app\/queryBalanceAndBonus script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/PingMe.loon.js, timeout=60, tag=PingMe抓包, argument=(captureToken)
 
 # 定时签到任务
-cron {cronExpr} script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/main/PingMe.loon.js, tag=PingMe签到, wake-system=1
+cron {cronExpr} script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/PingMe.loon.js, tag=PingMe签到, wake-system=1
 
 [MITM]
 hostname = api.pingmeapp.net
