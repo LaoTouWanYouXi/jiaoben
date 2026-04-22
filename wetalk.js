@@ -39,15 +39,40 @@ const scriptName = 'WeTalk';
 // Loon Argument 参数解析
 function getArg(name, defaultVal = '') {
     if (typeof $argument !== 'undefined' && $argument) {
+        // 处理裸布尔值（Loon switch 传递的格式）
+        if ($argument === true) return 'true';
+        if ($argument === false) return 'false';
+
+        // 如果是纯字符串（不是JSON，也不是key=value格式），直接返回
+        // 这种情况用于 cron 表达式: "20 0/4 * * *"
+        if (typeof $argument === 'string') {
+            // 不是 key=value 格式，直接返回原值
+            if (!$argument.includes('=') && !$argument.includes('{')) {
+                return $argument;
+            }
+            // 处理字符串 true/false
+            if ($argument === 'true') return 'true';
+            if ($argument === 'false') return 'false';
+        }
+
         try {
             const args = JSON.parse($argument);
-            return args[name] !== undefined ? args[name] : defaultVal;
+            // 如果解析后是布尔值，直接返回
+            if (typeof args === 'boolean') return args ? 'true' : 'false';
+            // 如果解析后是对象，取对应字段
+            if (typeof args === 'object' && args !== null) {
+                return args[name] !== undefined ? args[name] : defaultVal;
+            }
         } catch (e) {
             // 字符串格式解析: "key1=value1&key2=value2"
             const pairs = $argument.split('&');
             for (const pair of pairs) {
-                const [k, v] = pair.split('=');
-                if (k === name) return decodeURIComponent(v || '');
+                const idx = pair.indexOf('=');
+                if (idx > 0) {
+                    const k = pair.slice(0, idx);
+                    const v = pair.slice(idx + 1);
+                    if (k === name) return decodeURIComponent(v || '');
+                }
             }
         }
     }
@@ -63,6 +88,7 @@ const CONFIG = {
 };
 
 // 调试输出当前配置
+console.log(`[${scriptName}] 原始参数: ${JSON.stringify($argument)}`);
 console.log(`[${scriptName}] 配置加载: 抓包开关=${CONFIG.captureEnabled}, 定时规则=${CONFIG.cronExpr}`);
 
 const isLoon = typeof $persistentStore !== 'undefined';
