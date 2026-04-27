@@ -1,15 +1,15 @@
-// 2026/04/21
+// 2026/04/27
 /*
 @Name：WeTalk 自动化签到+视频奖励 (Loon版)
 @Author：TG@ZenMoFiShi (适配 by Grok)
 
-Loon 配置示例（直接复制到 Loon → 插件 或 脚本）：
+Loon 配置示例：
 
 [Script]
-# 抓包保存账号参数（打开 WeTalk App 触发即可）
+# WeTalk 抓包保存账号（打开 WeTalk App 触发即可，推荐抓完后禁用）
 http-request ^https:\/\/api\.wetalkapp\.com\/app\/queryBalanceAndBonus script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/wetalk.js, timeout=60, tag=WeTalk抓包
 
-# 定时签到任务（每4小时运行一次）
+# WeTalk 签到任务（每6小时运行一次）
 cron "20 0/6 * * *" script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/wetalk.js, tag=WeTalk签到, wake-system=1
 
 [MITM]
@@ -33,7 +33,7 @@ const IPHONE_MODELS = ['iPhone14,3','iPhone13,3','iPhone15,3','iPhone16,1','iPho
 const CFN_VERS = ['1410.0.3','1494.0.7','1568.100.1','1209.1','1474.0.4','1568.200.2'];
 const DARWIN_VERS = ['22.6.0','23.5.0','23.6.0','24.0.0','22.4.0'];
 
-// ==================== 环境适配函数 ====================
+// ==================== 环境适配 ====================
 function getPrefsValue(key) {
     if (isLoon) return $persistentStore.read(key);
     if (isQuanX) return $prefs.valueForKey(key);
@@ -65,9 +65,8 @@ function httpRequest(options) {
     });
 }
 
-// MD5 函数（保持不变，代码太长此处省略，直接复制原脚本中的 MD5 函数）
+// ==================== MD5 ====================
 function MD5(string) {
-  // ...（原脚本中的完整 MD5 实现，保持不变）
   function RotateLeft(lValue, iShiftBits) { return (lValue << iShiftBits) | (lValue >>> (32 - iShiftBits)); }
   function AddUnsigned(lX, lY) {
     const lX4 = lX & 0x40000000, lY4 = lY & 0x40000000, lX8 = lX & 0x80000000, lY8 = lY & 0x80000000;
@@ -140,8 +139,6 @@ function MD5(string) {
   return (WordToHex(a) + WordToHex(b) + WordToHex(c) + WordToHex(d)).toLowerCase();
 }
 
-// 其余函数保持不变（getUTCSignDate、normalizeHeaderNameMap、parseRawQuery、fingerprintOf、loadStore、saveStore、pickItem、buildUA、buildSignedParamsRaw、buildUrl、cloneHeaders、buildHeaders、sleep 等）
-
 function getUTCSignDate() {
   const now = new Date();
   const pad = n => String(n).padStart(2, '0');
@@ -168,22 +165,59 @@ function parseRawQuery(url) {
   return rawMap;
 }
 
+function safeDecode(v) {
+  if (v == null) return '';
+  try { return decodeURIComponent(String(v)); } catch (e) { return String(v); }
+}
+
+function emailKeyOf(paramsRaw) {
+  const raw = (paramsRaw || {}).email;
+  if (!raw) return '';
+  return safeDecode(raw).trim().toLowerCase();
+}
+
 function fingerprintOf(paramsRaw) {
+  const email = emailKeyOf(paramsRaw);
+  if (email) return email;
   const drop = { sign:1, signDate:1, timestamp:1, ts:1, nonce:1, random:1, reqTime:1, reqId:1, requestId:1 };
   const base = Object.keys(paramsRaw || {}).filter(k => !drop[k]).sort().map(k => `${k}=${paramsRaw[k]}`).join('&');
-  return MD5(base).slice(0, 12);
+  return 'fp_' + MD5(base).slice(0, 12);
+}
+
+function migrateStore(store) {
+  if (!store || !store.accounts) return store;
+  const newAccounts = {};
+  const newOrder = [];
+  let migrated = false;
+  (store.order || Object.keys(store.accounts)).forEach(oldId => {
+    const acc = store.accounts[oldId];
+    if (!acc) return;
+    const email = emailKeyOf(acc.capture && acc.capture.paramsRaw);
+    const newId = email || oldId;
+    if (newId !== oldId) migrated = true;
+    const prev = newAccounts[newId];
+    if (!prev || (acc.updatedAt || 0) >= (prev.updatedAt || 0)) {
+      newAccounts[newId] = Object.assign({}, acc, { id: newId, alias: acc.alias || email || newId });
+      if (newOrder.indexOf(newId) < 0) newOrder.push(newId);
+    }
+  });
+  if (migrated) {
+    store.accounts = newAccounts;
+    store.order = newOrder;
+  }
+  return store;
 }
 
 function loadStore() {
   const raw = getPrefsValue(storeKey);
-  if (!raw) return { version: 1, accounts: {}, order: [] };
+  if (!raw) return { version: 2, accounts: {}, order: [] };
   try {
     const obj = JSON.parse(raw);
     if (!obj.accounts) obj.accounts = {};
     if (!Array.isArray(obj.order)) obj.order = Object.keys(obj.accounts);
-    return obj;
+    return migrateStore(obj);
   } catch (e) {
-    return { version: 1, accounts: {}, order: [] };
+    return { version: 2, accounts: {}, order: [] };
   }
 }
 
@@ -252,9 +286,8 @@ function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
-// ==================== 执行账号任务 ====================
 function runAccount(acc, index, total) {
-  const tag = `[账号${index+1}/${total} ${acc.alias || acc.id}]`;
+  const tag = `[账号${index+1}/${total} ${acc.alias || acc.email || acc.id}]`;
   const ua = buildUA(acc.baseUA, acc.uaSeed);
   const headers = buildHeaders(acc.capture, ua);
   const msgs = [tag];
@@ -323,37 +356,56 @@ function runAccount(acc, index, total) {
 
 // ==================== 主流程 ====================
 if (typeof $request !== 'undefined' && $request) {
-  // === 抓包保存账号参数 ===
+  // === 抓包保存账号（以 email 为唯一标识，已优化避免重复）===
   const paramsRaw = parseRawQuery($request.url);
   const headersMap = normalizeHeaderNameMap($request.headers || {});
   let baseUA = '';
-  Object.keys(headersMap).forEach(k => { if (k.toLowerCase() === 'user-agent') baseUA = headersMap[k]; });
+  Object.keys(headersMap).forEach(k => { 
+    if (k.toLowerCase() === 'user-agent') baseUA = headersMap[k]; 
+  });
+
+  const email = emailKeyOf(paramsRaw);
+  if (!email) {
+    notify('⚠️ 抓取失败', '请求里未取到 email 参数，请确认已登录后再触发抓包。');
+    $done({});
+    return;
+  }
 
   const store = loadStore();
-  const fp = fingerprintOf(paramsRaw);
-  const now = Date.now();
-  const existed = !!store.accounts[fp];
-  const uaSeed = existed ? store.accounts[fp].uaSeed : store.order.length;
-  const alias = existed ? store.accounts[fp].alias : `账号${store.order.length + 1}`;
+  const accId = email;
+  const existed = !!store.accounts[accId];
 
-  store.accounts[fp] = {
-    id: fp,
+  if (existed) {
+    console.log(`【${scriptName}】账号 ${email} 已存在，跳过重复抓包`);
+    $done({});
+    return;
+  }
+
+  // 首次抓到才保存
+  const now = Date.now();
+  const uaSeed = store.order.length;
+  const alias = email;
+
+  store.accounts[accId] = {
+    id: accId,
+    email: email,
     alias,
     uaSeed,
     baseUA,
     capture: { url: $request.url, paramsRaw, headers: headersMap },
-    createdAt: existed ? store.accounts[fp].createdAt : now,
+    createdAt: now,
     updatedAt: now
   };
-  if (!existed) store.order.push(fp);
+  store.order.push(accId);
   saveStore(store);
 
   const total = store.order.length;
-  notify(existed ? '🔄 账号参数已更新' : '✅ 新账号已入库', `${alias}（id:${fp}）\n当前账号总数：${total}`);
-  console.log(`【${scriptName}】${existed ? 'update' : 'add'} account ${fp}`);
+  notify('✅ 新账号已入库', `${email}\n当前账号总数：${total}`);
+  console.log(`【${scriptName}】新增账号 ${email}`);
+  
   $done({});
 } else {
-  // === 执行定时任务 ===
+  // === 执行定时签到任务 ===
   const store = loadStore();
   const ids = store.order.filter(id => store.accounts[id]);
   if (!ids.length) {
