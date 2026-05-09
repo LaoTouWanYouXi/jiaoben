@@ -1,20 +1,16 @@
 // 2026/04/27
 /*
-@Name：WeTalk 自动化签到+视频奖励 (Loon & Egern 兼容版)
+@Name：WeTalk 自动化签到+视频奖励 (Egern & Loon 兼容版)
 @Author：TG@ZenMoFiShi (适配 by Grok)
 
-【Loon / Egern 配置示例】
-
-# 抓包保存账号（抓完后建议禁用）
+【Egern / Loon 配置】
 http-request ^https:\/\/api\.wetalkapp\.com\/app\/queryBalanceAndBonus script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/wetalk.compat.js, tag=WeTalk抓包
-
-# 定时签到（每6小时运行一次）
 cron "20 0/6 * * *" script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/wetalk.compat.js, tag=WeTalk签到, wake-system=1
 */
 
 const isQuanX = typeof $task !== 'undefined';
 const isLoon = typeof $loon !== 'undefined' || (typeof $persistentStore !== 'undefined' && typeof $notification !== 'undefined' && !isQuanX);
-const isEgern = typeof $httpClient !== 'undefined' && typeof $persistentStore !== 'undefined' && !isLoon;
+const isEgern = !isQuanX && !isLoon && typeof $httpClient !== 'undefined' && typeof $persistentStore !== 'undefined';
 
 const scriptName = 'WeTalk';
 const storeKey = 'wetalk_accounts_v1';
@@ -23,12 +19,6 @@ const API_HOST = 'api.wetalkapp.com';
 const MAX_VIDEO = 5;
 const VIDEO_DELAY = 8000;
 const ACCOUNT_GAP = 3500;
-
-const IOS_VERSIONS = ['17.5.1','17.6.1','17.4.1','17.2.1','16.7.8','17.6','17.3.1','18.0.1','17.1.2','16.6.1'];
-const IOS_SCALES = ['2.00','3.00','3.00','2.00','3.00'];
-const IPHONE_MODELS = ['iPhone14,3','iPhone13,3','iPhone15,3','iPhone16,1','iPhone14,7','iPhone13,2','iPhone15,2','iPhone12,1'];
-const CFN_VERS = ['1410.0.3','1494.0.7','1568.100.1','1209.1','1474.0.4','1568.200.2'];
-const DARWIN_VERS = ['22.6.0','23.5.0','23.6.0','24.0.0','22.4.0'];
 
 // ==================== 环境适配 ====================
 function getPrefsValue(key) {
@@ -40,22 +30,15 @@ function setPrefsValue(key, value) {
 }
 
 function notify(title, body) {
-    if (isLoon || isEgern) {
-        $notification.post(scriptName, title, body);
-    } else if (isQuanX) {
-        $notify(scriptName, title, body);
-    }
+    if (isLoon || isEgern) $notification.post(scriptName, title, body);
+    else if (isQuanX) $notify(scriptName, title, body);
 }
 
 function httpRequest(options) {
     return new Promise((resolve, reject) => {
         $httpClient.get(options, (err, resp, body) => {
             if (err) reject(err);
-            else resolve({ 
-                status: resp.statusCode || resp.status, 
-                headers: resp.headers, 
-                body: body 
-            });
+            else resolve({ status: resp.statusCode || resp.status, headers: resp.headers, body });
         });
     });
 }
@@ -134,7 +117,7 @@ function MD5(string) {
   return (WordToHex(a) + WordToHex(b) + WordToHex(c) + WordToHex(d)).toLowerCase();
 }
 
-// ==================== 其余函数（保持不变）===================
+// ==================== 其他核心函数 ====================
 function getUTCSignDate() {
   const now = new Date();
   const pad = n => String(n).padStart(2, '0');
@@ -261,8 +244,12 @@ function cloneHeaders(headers) {
 
 function buildHeaders(capture, ua) {
   const headers = cloneHeaders(capture.headers || {});
-  delete headers['Content-Length']; delete headers['content-length'];
-  delete headers[':authority']; delete headers[':method']; delete headers[':path']; delete headers[':scheme'];
+  delete headers['Content-Length'];
+  delete headers['content-length'];
+  delete headers[':authority'];
+  delete headers[':method'];
+  delete headers[':path'];
+  delete headers[':scheme'];
   headers['Host'] = API_HOST;
   headers['Accept'] = headers['Accept'] || 'application/json';
   Object.keys(headers).forEach(k => { if (k.toLowerCase() === 'user-agent') delete headers[k]; });
@@ -274,6 +261,7 @@ function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
+// ==================== 执行账号任务 ====================
 function runAccount(acc, index, total) {
   const tag = `[账号${index+1}/${total} ${acc.alias || acc.email || acc.id}]`;
   const ua = buildUA(acc.baseUA, acc.uaSeed);
@@ -353,7 +341,7 @@ if (typeof $request !== 'undefined' && $request) {
 
   const email = emailKeyOf(paramsRaw);
   if (!email) {
-    notify('⚠️ 抓取失败', '请求里未取到 email 参数，请确认已登录后再触发抓包。');
+    notify('⚠️ 抓取失败', '未取到 email 参数，请登录后重试');
     $done({});
     return;
   }
@@ -363,7 +351,7 @@ if (typeof $request !== 'undefined' && $request) {
   const existed = !!store.accounts[accId];
 
   if (existed) {
-    console.log(`【${scriptName}】账号 ${email} 已存在，跳过重复抓包`);
+    console.log(`【${scriptName}】账号 ${email} 已存在，跳过`);
     $done({});
     return;
   }
@@ -374,7 +362,7 @@ if (typeof $request !== 'undefined' && $request) {
 
   store.accounts[accId] = {
     id: accId,
-    email: email,
+    email,
     alias,
     uaSeed,
     baseUA,
