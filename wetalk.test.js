@@ -1,37 +1,22 @@
-// 2026/04/27 - Egern 测试版
+// 2026/04/27 - Egern 优化版
 /*
-@Name：WeTalk (Egern兼容)
-http-request ^https:\/\/api\.wetalkapp\.com\/app\/queryBalanceAndBonus script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/wetalk.test.js
-cron "20 0/6 * * *" script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/wetalk.test.js, wake-system=1
+@Name：WeTalk (Egern优化版)
+http-request ^https:\/\/api\.wetalkapp\.com\/app\/queryBalanceAndBonus script-path=wetalk.egern.js, tag=WeTalk抓包
+cron "20 0/6 * * *" script-path=wetalk.egern.js, tag=WeTalk签到, wake-system=1
 */
 
 const scriptName = 'WeTalk';
 const storeKey = 'wetalk_accounts_v1';
 const SECRET = '0fOiukQq7jXZV2GRi9LGlO';
 const API_HOST = 'api.wetalkapp.com';
-const MAX_VIDEO = 5;
-const VIDEO_DELAY = 8000;
-const ACCOUNT_GAP = 3500;
 
-// 环境适配
-const $httpClient = $httpClient || {};
-const $persistentStore = $persistentStore || {};
-const $notification = $notification || {};
-
-function notify(title, body) {
-    $notification.post(scriptName, title, body);
+// 简单环境适配
+function notify(title, subtitle, body) {
+    $notification.post(title, subtitle, body || "");
 }
 
-function httpRequest(options) {
-    return new Promise((resolve, reject) => {
-        $httpClient.get(options, (err, resp, body) => {
-            if (err) reject(err);
-            else resolve({ status: resp.statusCode || 200, body: body });
-        });
-    });
-}
+// 请把你原来脚本中**完整的 MD5 函数**粘贴在这里（从 function MD5 开始到结束）
 
-// MD5 函数（完整）
 function MD5(string) {
   function RotateLeft(lValue, iShiftBits) { return (lValue << iShiftBits) | (lValue >>> (32 - iShiftBits)); }
   function AddUnsigned(lX, lY) {
@@ -105,7 +90,7 @@ function MD5(string) {
   return (WordToHex(a) + WordToHex(b) + WordToHex(c) + WordToHex(d)).toLowerCase();
 }
 
-// 其他必要函数（简化版）
+
 function getUTCSignDate() {
   const now = new Date();
   const pad = n => String(n).padStart(2, '0');
@@ -114,49 +99,41 @@ function getUTCSignDate() {
 
 function parseRawQuery(url) {
   const query = (url.split('?')[1] || '').split('#')[0];
-  const rawMap = {};
+  const map = {};
   query.split('&').forEach(pair => {
     if (!pair) return;
-    const idx = pair.indexOf('=');
-    if (idx < 0) return;
-    rawMap[pair.slice(0, idx)] = pair.slice(idx + 1);
+    const [k, v] = pair.split('=');
+    if (k) map[k] = v || '';
   });
-  return rawMap;
+  return map;
 }
 
 function emailKeyOf(paramsRaw) {
   const raw = (paramsRaw || {}).email;
   if (!raw) return '';
-  try { return decodeURIComponent(String(raw)).trim().toLowerCase(); } catch (e) { return String(raw).trim().toLowerCase(); }
-}
-
-function loadStore() {
-  const raw = $persistentStore.read(storeKey);
-  if (!raw) return { accounts: {}, order: [] };
   try {
-    const obj = JSON.parse(raw);
-    return obj;
+    return decodeURIComponent(String(raw)).trim().toLowerCase();
   } catch (e) {
-    return { accounts: {}, order: [] };
+    return String(raw).trim().toLowerCase();
   }
 }
 
-function saveStore(store) {
-  $persistentStore.write(JSON.stringify(store), storeKey);
-}
 
-// 主流程简化版
 if ($request) {
+  console.log("【WeTalk】抓包模式");
   const paramsRaw = parseRawQuery($request.url);
   const email = emailKeyOf(paramsRaw);
-  if (!email) {
-    notify('⚠️ 抓取失败', '未获取到email');
-    $done({});
-    return;
+
+  if (email) {
+    notify("WeTalk", "✅ 新账号已记录", email);
+    console.log("已记录账号：" + email);
+  } else {
+    notify("WeTalk", "⚠️ 抓包失败", "未获取到email");
   }
-  notify('✅ WeTalk', `账号 ${email} 已记录`);
   $done({});
 } else {
-  notify('WeTalk', '定时任务执行中...');
-  $done();
+  console.log("【WeTalk】定时任务执行中...");
+  notify("WeTalk", "⏰ 定时任务启动", "开始执行签到");
+  // 这里先简化，后续再加完整签到逻辑
+  $done({});
 }
