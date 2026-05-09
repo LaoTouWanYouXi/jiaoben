@@ -3,9 +3,9 @@
 @Name：PingMe 自动化签到+视频奖励 (Loon & Egern 兼容版)
 @Author：怎么肥事 (适配+优化 by Grok)
 
-【Loon / Egern 配置示例】
+【Egern / Loon 配置示例】
 
-# 抓包保存账号（抓完后建议禁用）
+# 抓包保存账号
 http-request ^https:\/\/api\.pingmeapp\.net\/app\/queryBalanceAndBonus script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/PingMe.compat.js, tag=PingMe抓包
 
 # 定时签到（每6小时运行一次）
@@ -14,7 +14,7 @@ cron "20 0/6 * * *" script-path=https://raw.githubusercontent.com/LaoTouWanYouXi
 
 const isQuanX = typeof $task !== 'undefined';
 const isLoon = typeof $loon !== 'undefined' || (typeof $persistentStore !== 'undefined' && typeof $notification !== 'undefined' && !isQuanX);
-const isEgern = typeof $httpClient !== 'undefined' && typeof $persistentStore !== 'undefined' && !isLoon;
+const isEgern = !isQuanX && !isLoon && typeof $httpClient !== 'undefined' && typeof $persistentStore !== 'undefined';
 
 const scriptName = 'PingMe';
 const storeKey = 'pingme_accounts_v1';
@@ -53,7 +53,7 @@ function httpRequest(options) {
             else resolve({ 
                 status: resp.statusCode || resp.status, 
                 headers: resp.headers, 
-                body 
+                body: body 
             });
         });
     });
@@ -133,8 +133,6 @@ function MD5(string) {
   return (WordToHex(a) + WordToHex(b) + WordToHex(c) + WordToHex(d)).toLowerCase();
 }
 
-
-// ==================== 其他函数 ====================
 function getUTCSignDate() {
   const now = new Date();
   const pad = n => String(n).padStart(2, '0');
@@ -245,7 +243,6 @@ function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
-// ==================== 执行任务 ====================
 function runAccount(acc, index, total) {
   const tag = `[账号${index+1}/${total} ${acc.alias || acc.id}]`;
   const ua = buildUA(acc.baseUA, acc.uaSeed);
