@@ -1,8 +1,8 @@
 // 2026/04/27 - Egern 优化版
 /*
 @Name：WeTalk (Egern优化版)
-http-request ^https:\/\/api\.wetalkapp\.com\/app\/queryBalanceAndBonus script-path=wetalk.egern.js, tag=WeTalk抓包
-cron "20 0/6 * * *" script-path=wetalk.egern.js, tag=WeTalk签到, wake-system=1
+http-request ^https:\/\/api\.wetalkapp\.com\/app\/queryBalanceAndBonus script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/wetalk.test.js, tag=WeTalk抓包
+cron "20 0/6 * * *" script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/wetalk.test.js, tag=WeTalk签到, wake-system=1
 */
 
 const scriptName = 'WeTalk';
