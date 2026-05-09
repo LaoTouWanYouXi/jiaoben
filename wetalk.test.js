@@ -1,18 +1,69 @@
-// 2026/04/27 - WeTalk Egern 完整稳定版
+// 2026/04/27
 /*
-@Name：WeTalk (Egern稳定版)
-http-request ^https:\/\/api\.wetalkapp\.com\/app\/queryBalanceAndBonus script-path=wetalk.egern.js, tag=WeTalk抓包
-cron "20 0/6 * * *" script-path=wetalk.egern.js, tag=WeTalk签到, wake-system=1
+@Name：WeTalk 自动化签到+视频奖励 (Egern版)
+@Author：TG@ZenMoFiShi (适配 by Grok，Egern适配 by 助手)
+
+Egern 配置示例：
+
+[Script]
+# WeTalk 抓包保存账号（打开 WeTalk App 触发即可，推荐抓完后禁用）
+http-request ^https:\/\/api\.wetalkapp\.com\/app\/queryBalanceAndBonus script-path=脚本本地路径/wetalk_egern.js, tag=WeTalk抓包
+
+# WeTalk 签到任务（每6小时运行一次）
+cron "20 0/6 * * *" script-path=脚本本地路径/wetalk_egern.js, tag=WeTalk签到
+
+[MITM]
+hostname = api.wetalkapp.com
 */
 
+// ==================== 环境判断 ====================
+const isEgern = typeof $rocket !== 'undefined';
 const scriptName = 'WeTalk';
+const storeKey = 'wetalk_accounts_v1';
+const SECRET = '0fOiukQq7jXZV2GRi9LGlO';
+const API_HOST = 'api.wetalkapp.com';
+const MAX_VIDEO = 5;
+const VIDEO_DELAY = 8000;
+const ACCOUNT_GAP = 3500;
 
-// 通知函数
-function notify(title, subtitle, body) {
-    $notification.post(title, subtitle, body || "");
+const IOS_VERSIONS = ['17.5.1','17.6.1','17.4.1','17.2.1','16.7.8','17.6','17.3.1','18.0.1','17.1.2','16.6.1'];
+const IOS_SCALES = ['2.00','3.00','3.00','2.00','3.00'];
+const IPHONE_MODELS = ['iPhone14,3','iPhone13,3','iPhone15,3','iPhone16,1','iPhone14,7','iPhone13,2','iPhone15,2','iPhone12,1'];
+const CFN_VERS = ['1410.0.3','1494.0.7','1568.100.1','1209.1','1474.0.4','1568.200.2'];
+const DARWIN_VERS = ['22.6.0','23.5.0','23.6.0','24.0.0','22.4.0'];
+
+// ==================== Egern 环境适配 ====================
+function getPrefsValue(key) {
+    if (isEgern) return $rocket.persistence.getItem(key);
+    return null;
 }
 
-// MD5 函数（必须完整）
+function setPrefsValue(key, value) {
+    if (isEgern) $rocket.persistence.setItem(key, value);
+}
+
+function notify(title, body) {
+    if (isEgern) $rocket.notify(scriptName, title, body);
+}
+
+function httpRequest(options) {
+    return new Promise((resolve, reject) => {
+        if (isEgern) {
+            $rocket.http.get(options, (err, resp, body) => {
+                if (err) reject(err);
+                else resolve({ 
+                    status: resp.statusCode, 
+                    headers: resp.headers, 
+                    body: body || '' 
+                });
+            });
+        } else {
+            reject('不支持的环境，仅支持 Egern（小火箭）');
+        }
+    });
+}
+
+// ==================== MD5 算法（保持原逻辑）====================
 function MD5(string) {
   function RotateLeft(lValue, iShiftBits) { return (lValue << iShiftBits) | (lValue >>> (32 - iShiftBits)); }
   function AddUnsigned(lX, lY) {
@@ -75,7 +126,7 @@ function MD5(string) {
     a = GG(a,b,c,d,x[k+13],S21,0xA9E3E905); d = GG(d,a,b,c,x[k+2],S22,0xFCEFA3F8); c = GG(c,d,a,b,x[k+7],S23,0x676F02D9); b = GG(b,c,d,a,x[k+12],S24,0x8D2A4C8A);
     a = HH(a,b,c,d,x[k+5],S31,0xFFFA3942); d = HH(d,a,b,c,x[k+8],S32,0x8771F681); c = HH(c,d,a,b,x[k+11],S33,0x6D9D6122); b = HH(b,c,d,a,x[k+14],S34,0xFDE5380C);
     a = HH(a,b,c,d,x[k+1],S31,0xA4BEEA44); d = HH(d,a,b,c,x[k+4],S32,0x4BDECFA9); c = HH(c,d,a,b,x[k+7],S33,0xF6BB4B60); b = HH(b,c,d,a,x[k+10],S34,0xBEBFBC70);
-    a = HH(a,b,c,d,x[k+13],S31,0x289B7EC6); d = HH(d,a,b,c,x[k+0],S32,0xEAA127FA); c = HH(c,d,a,b,x[k+3],S33,0xD4EF3085); b = HH(b,c,d,a,x[k+6],S34,0x04881D05);
+    a = HH(a,b,c,d,x[k+13],S31,0x289B7EC6); d = HH(d,a,b,c,x[k+0],S32,0xEAA127FA); c = HH(c,d,a,b,x[k+3],S33,0xD4EF3085); b = HH(b,c,d,a,x[k+6],S34,0xC4AC5665);
     a = HH(a,b,c,d,x[k+9],S31,0xD9D4D039); d = HH(d,a,b,c,x[k+12],S32,0xE6DB99E5); c = HH(c,d,a,b,x[k+15],S33,0x1FA27CF8); b = HH(b,c,d,a,x[k+2],S34,0xC4AC5665);
     a = II(a,b,c,d,x[k+0],S41,0xF4292244); d = II(d,a,b,c,x[k+7],S42,0x432AFF97); c = II(c,d,a,b,x[k+14],S43,0xAB9423A7); b = II(b,c,d,a,x[k+5],S44,0xFC93A039);
     a = II(a,b,c,d,x[k+12],S41,0x655B59C3); d = II(d,a,b,c,x[k+3],S42,0x8F0CCC92); c = II(c,d,a,b,x[k+10],S43,0xFFEFF47D); b = II(b,c,d,a,x[k+1],S44,0x85845DD1);
@@ -86,55 +137,294 @@ function MD5(string) {
   return (WordToHex(a) + WordToHex(b) + WordToHex(c) + WordToHex(d)).toLowerCase();
 }
 
-// ==================== 其他必要函数 ====================
+// ==================== 工具函数（保持原逻辑）====================
 function getUTCSignDate() {
   const now = new Date();
   const pad = n => String(n).padStart(2, '0');
   return `${now.getUTCFullYear()}-${pad(now.getUTCMonth()+1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())}`;
 }
 
+function normalizeHeaderNameMap(headers) {
+  const out = {};
+  Object.keys(headers || {}).forEach(k => out[k] = headers[k]);
+  return out;
+}
+
 function parseRawQuery(url) {
   const query = (url.split('?')[1] || '').split('#')[0];
-  const map = {};
+  const rawMap = {};
   query.split('&').forEach(pair => {
     if (!pair) return;
-    const eq = pair.indexOf('=');
-    if (eq > 0) {
-      const k = pair.substring(0, eq);
-      const v = pair.substring(eq + 1);
-      map[k] = v;
-    }
+    const idx = pair.indexOf('=');
+    if (idx < 0) return;
+    const k = pair.slice(0, idx);
+    const v = pair.slice(idx + 1);
+    rawMap[k] = v;
   });
-  return map;
+  return rawMap;
+}
+
+function safeDecode(v) {
+  if (v == null) return '';
+  try { return decodeURIComponent(String(v)); } catch (e) { return String(v); }
 }
 
 function emailKeyOf(paramsRaw) {
   const raw = (paramsRaw || {}).email;
   if (!raw) return '';
-  try {
-    return decodeURIComponent(String(raw)).trim().toLowerCase();
-  } catch (e) {
-    return String(raw).trim().toLowerCase();
+  return safeDecode(raw).trim().toLowerCase();
+}
+
+function fingerprintOf(paramsRaw) {
+  const email = emailKeyOf(paramsRaw);
+  if (email) return email;
+  const drop = { sign:1, signDate:1, timestamp:1, ts:1, nonce:1, random:1, reqTime:1, reqId:1, requestId:1 };
+  const base = Object.keys(paramsRaw || {}).filter(k => !drop[k]).sort().map(k => `${k}=${paramsRaw[k]}`).join('&');
+  return 'fp_' + MD5(base).slice(0, 12);
+}
+
+function migrateStore(store) {
+  if (!store || !store.accounts) return store;
+  const newAccounts = {};
+  const newOrder = [];
+  let migrated = false;
+  (store.order || Object.keys(store.accounts)).forEach(oldId => {
+    const acc = store.accounts[oldId];
+    if (!acc) return;
+    const email = emailKeyOf(acc.capture && acc.capture.paramsRaw);
+    const newId = email || oldId;
+    if (newId !== oldId) migrated = true;
+    const prev = newAccounts[newId];
+    if (!prev || (acc.updatedAt || 0) >= (prev.updatedAt || 0)) {
+      newAccounts[newId] = Object.assign({}, acc, { id: newId, alias: acc.alias || email || newId });
+      if (newOrder.indexOf(newId) < 0) newOrder.push(newId);
+    }
+  });
+  if (migrated) {
+    store.accounts = newAccounts;
+    store.order = newOrder;
   }
+  return store;
+}
+
+function loadStore() {
+  const raw = getPrefsValue(storeKey);
+  if (!raw) return { version: 2, accounts: {}, order: [] };
+  try {
+    const obj = JSON.parse(raw);
+    if (!obj.accounts) obj.accounts = {};
+    if (!Array.isArray(obj.order)) obj.order = Object.keys(obj.accounts);
+    return migrateStore(obj);
+  } catch (e) {
+    return { version: 2, accounts: {}, order: [] };
+  }
+}
+
+function saveStore(store) {
+  setPrefsValue(storeKey, JSON.stringify(store));
+}
+
+function pickItem(arr, seed) {
+  return arr[seed % arr.length];
+}
+
+function buildUA(baseUA, seed) {
+  const iosVer = pickItem(IOS_VERSIONS, seed);
+  const scale = pickItem(IOS_SCALES, seed + 1);
+  const model = pickItem(IPHONE_MODELS, seed + 2);
+  const cfn = pickItem(CFN_VERS, seed + 3);
+  const darwin = pickItem(DARWIN_VERS, seed + 4);
+  if (baseUA && typeof baseUA === 'string') {
+    let ua = baseUA;
+    let changed = false;
+    if (/iOS \d+(\.\d+){0,2}/.test(ua)) { ua = ua.replace(/iOS \d+(\.\d+){0,2}/, `iOS ${iosVer}`); changed = true; }
+    if (/Scale\/\d+(\.\d+)?/.test(ua)) { ua = ua.replace(/Scale\/\d+(\.\d+)?/, `Scale/${scale}`); changed = true; }
+    if (/iPhone\d+,\d+/.test(ua)) { ua = ua.replace(/iPhone\d+,\d+/, model); changed = true; }
+    if (/CFNetwork\/[\d.]+/.test(ua)) { ua = ua.replace(/CFNetwork\/[\d.]+/, `CFNetwork/${cfn}`); changed = true; }
+    if (/Darwin\/[\d.]+/.test(ua)) { ua = ua.replace(/Darwin\/[\d.]+/, `Darwin/${darwin}`); changed = true; }
+    if (changed) return ua;
+  }
+  return `WeTalk/30.6.0 (com.innovationworks.wetalk; build:28; iOS ${iosVer}) Alamofire/5.4.3`;
+}
+
+function buildSignedParamsRaw(capture) {
+  const params = {};
+  Object.keys(capture.paramsRaw || {}).forEach(k => {
+    if (k !== 'sign' && k !== 'signDate') params[k] = capture.paramsRaw[k];
+  });
+  params.signDate = getUTCSignDate();
+  const signBase = Object.keys(params).sort().map(k => `${k}=${params[k]}`).join('&');
+  params.sign = MD5(signBase + SECRET);
+  return params;
+}
+
+function buildUrl(path, capture) {
+  const params = buildSignedParamsRaw(capture);
+  const qs = Object.keys(params).map(k => `${k}=${encodeURIComponent(params[k])}`).join('&');
+  return `https://${API_HOST}/app/${path}?${qs}`;
+}
+
+function cloneHeaders(headers) {
+  const out = {};
+  Object.keys(headers || {}).forEach(k => out[k] = headers[k]);
+  return out;
+}
+
+function buildHeaders(capture, ua) {
+  const headers = cloneHeaders(capture.headers || {});
+  delete headers['Content-Length']; delete headers['content-length'];
+  delete headers[':authority']; delete headers[':method']; delete headers[':path']; delete headers[':scheme'];
+  headers['Host'] = API_HOST;
+  headers['Accept'] = headers['Accept'] || 'application/json';
+  Object.keys(headers).forEach(k => { if (k.toLowerCase() === 'user-agent') delete headers[k]; });
+  headers['User-Agent'] = ua;
+  return headers;
+}
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+function runAccount(acc, index, total) {
+  const tag = `[账号${index+1}/${total} ${acc.alias || acc.email || acc.id}]`;
+  const ua = buildUA(acc.baseUA, acc.uaSeed);
+  const headers = buildHeaders(acc.capture, ua);
+  const msgs = [tag];
+
+  function fetchApi(path) {
+    const url = buildUrl(path, acc.capture);
+    return httpRequest({ url, method: 'GET', headers });
+  }
+
+  function doVideoLoop(count) {
+    let i = 0;
+    function next() {
+      if (i >= count) return Promise.resolve();
+      return new Promise(resolve => {
+        setTimeout(() => {
+          i++;
+          fetchApi('videoBonus').then(res => {
+            try {
+              const d = JSON.parse(res.body);
+              if (d.retcode === 0) {
+                msgs.push(`🎬 视频${i}：+${d.result?.bonus || '?'} Coins`);
+                resolve(next());
+              } else {
+                msgs.push(`⏸ 视频${i}：${d.retmsg}`);
+                resolve();
+              }
+            } catch (e) {
+              msgs.push(`❌ 视频${i}：解析失败`);
+              resolve();
+            }
+          }).catch(err => {
+            msgs.push(`❌ 视频${i}：${err.message || '请求失败'}`);
+            resolve();
+          });
+        }, i === 0 ? 1500 : VIDEO_DELAY);
+      });
+    }
+    return next();
+  }
+
+  return fetchApi('queryBalanceAndBonus').then(res => {
+    try {
+      const d = JSON.parse(res.body);
+      if (d.retcode === 0) msgs.push(`💰 余额：${d.result.balance} Coins`);
+      else msgs.push(`⚠️ 查询：${d.retmsg}`);
+    } catch (e) { msgs.push('❌ 查询：解析失败'); }
+    return fetchApi('checkIn');
+  }).then(res => {
+    try {
+      const d = JSON.parse(res.body);
+      if (d.retcode === 0) msgs.push(`✅ 签到：${(d.result?.bonusHint || d.retmsg || '').replace(/\n/g, ' ')}`);
+      else msgs.push(`⚠️ 签到：${d.retmsg}`);
+    } catch (e) { msgs.push('❌ 签到：解析失败'); }
+    return doVideoLoop(MAX_VIDEO);
+  }).then(() => fetchApi('queryBalanceAndBonus')).then(res => {
+    try {
+      const d = JSON.parse(res.body);
+      if (d.retcode === 0) msgs.push(`💰 最新余额：${d.result.balance} Coins`);
+    } catch (e) {}
+    return msgs.join('\n');
+  }).catch(err => {
+    msgs.push(`❌ 异常：${err.message || String(err)}`);
+    return msgs.join('\n');
+  });
 }
 
 // ==================== 主流程 ====================
 if (typeof $request !== 'undefined' && $request) {
-  console.log("【WeTalk】抓包模式");
+  // === 抓包保存账号（以 email 为唯一标识，已优化避免重复）===
   const paramsRaw = parseRawQuery($request.url);
-  const email = emailKeyOf(paramsRaw);
+  const headersMap = normalizeHeaderNameMap($request.headers || {});
+  let baseUA = '';
+  Object.keys(headersMap).forEach(k => { 
+    if (k.toLowerCase() === 'user-agent') baseUA = headersMap[k]; 
+  });
 
-  if (email) {
-    notify("WeTalk", "✅ 新账号已入库", email);
-    console.log("成功记录账号: " + email);
-  } else {
-    notify("WeTalk", "⚠️ 抓包失败", "未找到email参数");
+  const email = emailKeyOf(paramsRaw);
+  if (!email) {
+    notify('⚠️ 抓取失败', '请求里未取到 email 参数，请确认已登录后再触发抓包。');
+    $done({});
+    return;
   }
+
+  const store = loadStore();
+  const accId = email;
+  const existed = !!store.accounts[accId];
+
+  if (existed) {
+    console.log(`【${scriptName}】账号 ${email} 已存在，跳过重复抓包`);
+    $done({});
+    return;
+  }
+
+  // 首次抓到才保存
+  const now = Date.now();
+  const uaSeed = store.order.length;
+  const alias = email;
+
+  store.accounts[accId] = {
+    id: accId,
+    email: email,
+    alias,
+    uaSeed,
+    baseUA,
+    capture: { url: $request.url, paramsRaw, headers: headersMap },
+    createdAt: now,
+    updatedAt: now
+  };
+  store.order.push(accId);
+  saveStore(store);
+
+  const total = store.order.length;
+  notify('✅ 新账号已入库', `${email}\n当前账号总数：${total}`);
+  console.log(`【${scriptName}】新增账号 ${email}`);
+  
   $done({});
 } else {
-  console.log("【WeTalk】定时任务启动");
-  notify("WeTalk", "⏰ 定时任务", "开始执行签到...");
-  
-  // 简化版：先提示执行，后面再逐步完善完整签到逻辑
-  $done({});
+  // === 执行定时签到任务 ===
+  const store = loadStore();
+  const ids = store.order.filter(id => store.accounts[id]);
+  if (!ids.length) {
+    notify('⚠️ 未抓到任何账号', '请先打开 WeTalk 触发抓包');
+    $done();
+  } else {
+    const total = ids.length;
+    const results = [];
+    let chain = Promise.resolve();
+    ids.forEach((id, idx) => {
+      chain = chain.then(() => runAccount(store.accounts[id], idx, total))
+        .then(text => { results.push(text); })
+        .then(() => idx < ids.length - 1 ? sleep(ACCOUNT_GAP) : null);
+    });
+    chain.then(() => {
+      notify(`🎉 全部完成 (${total}个账号)`, results.join('\n———\n'));
+      $done();
+    }).catch(err => {
+      notify('❌ 任务异常', results.join('\n———\n') + '\n' + (err.message || String(err)));
+      $done();
+    });
+  }
 }
