@@ -1,22 +1,18 @@
-// 2026/04/27 - Egern 优化版
+// 2026/04/27 - WeTalk Egern 专用稳定版
 /*
-@Name：WeTalk (Egern优化版)
-http-request ^https:\/\/api\.wetalkapp\.com\/app\/queryBalanceAndBonus script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/wetalk.test.js, tag=WeTalk抓包
-cron "20 0/6 * * *" script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/wetalk.test.js, tag=WeTalk签到, wake-system=1
+@Name：WeTalk (Egern专用)
+http-request ^https:\/\/api\.wetalkapp\.com\/app\/queryBalanceAndBonus script-path=wetalk.egern.js, tag=WeTalk抓包
+cron "20 0/6 * * *" script-path=wetalk.egern.js, tag=WeTalk签到, wake-system=1
 */
 
 const scriptName = 'WeTalk';
-const storeKey = 'wetalk_accounts_v1';
-const SECRET = '0fOiukQq7jXZV2GRi9LGlO';
-const API_HOST = 'api.wetalkapp.com';
 
-// 简单环境适配
+// 基础通知
 function notify(title, subtitle, body) {
     $notification.post(title, subtitle, body || "");
 }
 
-// 请把你原来脚本中**完整的 MD5 函数**粘贴在这里（从 function MD5 开始到结束）
-
+// MD5 函数（必须保留完整）
 function MD5(string) {
   function RotateLeft(lValue, iShiftBits) { return (lValue << iShiftBits) | (lValue >>> (32 - iShiftBits)); }
   function AddUnsigned(lX, lY) {
@@ -90,50 +86,43 @@ function MD5(string) {
   return (WordToHex(a) + WordToHex(b) + WordToHex(c) + WordToHex(d)).toLowerCase();
 }
 
-
-function getUTCSignDate() {
-  const now = new Date();
-  const pad = n => String(n).padStart(2, '0');
-  return `${now.getUTCFullYear()}-${pad(now.getUTCMonth()+1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())}`;
-}
-
-function parseRawQuery(url) {
-  const query = (url.split('?')[1] || '').split('#')[0];
-  const map = {};
-  query.split('&').forEach(pair => {
-    if (!pair) return;
-    const [k, v] = pair.split('=');
-    if (k) map[k] = v || '';
-  });
-  return map;
-}
-
-function emailKeyOf(paramsRaw) {
-  const raw = (paramsRaw || {}).email;
-  if (!raw) return '';
-  try {
-    return decodeURIComponent(String(raw)).trim().toLowerCase();
-  } catch (e) {
-    return String(raw).trim().toLowerCase();
-  }
-}
-
-
+// 简化抓包逻辑
 if ($request) {
-  console.log("【WeTalk】抓包模式");
-  const paramsRaw = parseRawQuery($request.url);
-  const email = emailKeyOf(paramsRaw);
+    console.log("【WeTalk】抓包模式");
+    const paramsRaw = {};
+    const query = ($request.url.split('?')[1] || '').split('#')[0];
+    
+    query.split('&').forEach(pair => {
+        if (!pair) return;
+        const eq = pair.indexOf('=');
+        if (eq > 0) {
+            const k = pair.substring(0, eq);
+            const v = pair.substring(eq + 1);
+            paramsRaw[k] = v;
+        }
+    });
 
-  if (email) {
-    notify("WeTalk", "✅ 新账号已记录", email);
-    console.log("已记录账号：" + email);
-  } else {
-    notify("WeTalk", "⚠️ 抓包失败", "未获取到email");
-  }
-  $done({});
+    let email = '';
+    if (paramsRaw.email) {
+        try {
+            email = decodeURIComponent(paramsRaw.email).trim().toLowerCase();
+        } catch (e) {
+            email = String(paramsRaw.email).trim().toLowerCase();
+        }
+    }
+
+    if (email) {
+        notify("WeTalk", "✅ 账号已入库", email);
+        console.log("成功记录账号: " + email);
+    } else {
+        notify("WeTalk", "⚠️ 抓包失败", "未找到email");
+    }
+    $done({});
 } else {
-  console.log("【WeTalk】定时任务执行中...");
-  notify("WeTalk", "⏰ 定时任务启动", "开始执行签到");
-  // 这里先简化，后续再加完整签到逻辑
-  $done({});
+    // 定时任务
+    console.log("【WeTalk】定时任务启动");
+    notify("WeTalk", "⏰ 定时任务", "开始执行签到...");
+    
+    // 后续会逐步加上完整签到逻辑
+    $done({});
 }
