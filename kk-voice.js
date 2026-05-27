@@ -17,7 +17,7 @@ if (obj && obj.data) {
 
     // ==================== 会员核心字段（可逐一测试） ====================
     if (data.user_vip_info) {
-        data.user_vip_info.user_type = 2;
+        data.user_vip_info.user_type = 3;
         data.user_vip_info.vip_expired_time = 9999999999;
         data.user_vip_info.not_ad_vip_expired_time = 9999999999;
         data.user_vip_info.vip_expired_time_format = "永久会员";
@@ -34,7 +34,7 @@ if (obj && obj.data) {
     data.user_type = 3;                   // ← 可能关键
     data.vip_status = 1;
     data.is_member = 3;
-    data.member_status = 3;
+    data.member_status = 1;
 
     data.vip_type = 1;                 // ← 可以尝试取消注释测试
     data.is_vip = 1;
