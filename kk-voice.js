@@ -1,55 +1,48 @@
-// KK键盘 - 会员显示强化版（递归 + 强刷）
+// KK键盘 - 会员页面专攻版（强力覆盖）
 let body = $response.body;
 let obj = JSON.parse(body);
 
-function unlockAll(obj) {
-    if (!obj || typeof obj !== 'object') return;
+if (obj && obj.data) {
+    let data = obj.data;
 
-    // 次数
-    if (obj.totalCount !== undefined) obj.totalCount = 999;
-    if (obj.currCount !== undefined) obj.currCount = 999;
-    if (obj.freeCount !== undefined) obj.freeCount = 999;
+    // 基础功能保持
+    if (data.totalCount !== undefined) data.totalCount = 999;
+    if (data.currCount !== undefined) data.currCount = 999;
+    if (data.freeCount !== undefined) data.freeCount = 999;
 
-    // VIP 核心
-    if (obj.user_vip_info) {
-        obj.user_vip_info.user_type = 2;
-        obj.user_vip_info.vip_expired_time = 9999999999;
-        obj.user_vip_info.not_ad_vip_expired_time = 9999999999;
-        obj.user_vip_info.vip_expired_time_format = "永久会员";
+    // 语音包保持
+    if (data.vip_use !== undefined) data.vip_use = 1;
+    if (data.vvip_use !== undefined) data.vvip_use = 1;
+
+    // ==================== 会员页面强力覆盖 ====================
+    if (data.user_vip_info) {
+        data.user_vip_info.user_type = 2;
+        data.user_vip_info.vip_expired_time = 9999999999;
+        data.user_vip_info.not_ad_vip_expired_time = 9999999999;
+        data.user_vip_info.vip_expired_time_format = "永久会员";
     }
 
-    // 强力会员字段注入
-    const vipFields = [
-        'isVip', 'vip', 'is_vip', 'vip_status', 'member_status', 
-        'is_member', 'vipLevel', 'user_type', 'vip_type', 'svip'
-    ];
-    
-    vipFields.forEach(field => {
-        if (obj[field] !== undefined || obj.hasOwnProperty(field)) {
-            obj[field] = field.includes('Level') ? 2 : 1;
-        } else {
-            obj[field] = field.includes('Level') ? 2 : 1;
-        }
-    });
+    // 暴力注入所有可能字段
+    data.isVip = 1;
+    data.vip = 1;
+    data.vipLevel = 2;
+    data.vipExpire = 9999999999;
+    data.memberExpire = 9999999999;
+    data.not_ad_vip_expired_time = 9999999999;
+    data.user_type = 2;
+    data.vip_status = 1;
+    data.is_member = 1;
+    data.member_status = 1;
+    data.vip_type = 2;
+    data.is_vip = 1;
+    data.svip = 1;
+    data.expire_time = 9999999999;
+    data.vip_end_time = 9999999999;
 
-    obj.vipExpire = 9999999999;
-    obj.memberExpire = 9999999999;
-    obj.not_ad_vip_expired_time = 9999999999;
-    obj.expire_time = 9999999999;
-
-    // 语音包相关
-    if (obj.vip_use !== undefined) obj.vip_use = 1;
-    if (obj.vvip_use !== undefined) obj.vvip_use = 1;
-    if (obj.ad_status !== undefined) obj.ad_status = 0;
-
-    // 递归处理所有嵌套对象和数组
-    for (let key in obj) {
-        if (typeof obj[key] === 'object' && obj[key] !== null) {
-            unlockAll(obj[key]);
-        }
+    // 如果有 kkshow_user
+    if (data.kkshow_user) {
+        data.kkshow_user.role_id = 3;
     }
 }
-
-unlockAll(obj);
 
 $done({ body: JSON.stringify(obj) });
