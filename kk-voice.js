@@ -1,57 +1,57 @@
-// KK键盘 - 最终暴力版（修复语音包 + VIP显示）
+// KK键盘 - 统一VIP处理版（智能遍历）
 let body = $response.body;
 let obj = JSON.parse(body);
 
-if (obj && obj.data) {
-    let data = obj.data;
+function unlockVIP(obj) {
+    if (!obj) return;
 
-    // 次数
-    if (data.totalCount !== undefined) data.totalCount = 999;
-    if (data.currCount !== undefined) data.currCount = 999;
-    if (data.freeCount !== undefined) data.freeCount = 999;
+    // 处理单个对象
+    if (typeof obj === 'object') {
+        // 次数解锁
+        if (obj.totalCount !== undefined) obj.totalCount = 999;
+        if (obj.currCount !== undefined) obj.currCount = 999;
+        if (obj.freeCount !== undefined) obj.freeCount = 999;
+        if (obj.leftCount !== undefined) obj.leftCount = 999;
 
-    // 语音包核心修复
-    if (data.vip_use !== undefined) data.vip_use = 1;
-    if (data.vvip_use !== undefined) data.vvip_use = 1;
-    if (data.ad_status !== undefined) data.ad_status = 0;
+        // VIP核心字段统一处理
+        if (obj.user_vip_info) {
+            obj.user_vip_info.user_type = 2;
+            obj.user_vip_info.vip_expired_time = 9999999999;
+            obj.user_vip_info.not_ad_vip_expired_time = 9999999999;
+            obj.user_vip_info.vip_expired_time_format = "永久会员";
+        }
 
-    // 数组类型语音包列表处理
-    if (Array.isArray(data)) {
-        data.forEach(item => {
-            if (item.vip_use !== undefined) item.vip_use = 1;
-            if (item.vvip_use !== undefined) item.vvip_use = 1;
-            if (item.ad_status !== undefined) item.ad_status = 0;
-            if (Array.isArray(item.list)) {
-                item.list.forEach(sub => {
-                    if (sub.vip_use !== undefined) sub.vip_use = 1;
-                    if (sub.vvip_use !== undefined) sub.vvip_use = 1;
-                });
-            }
-        });
+        // 语音包相关
+        if (obj.vip_use !== undefined) obj.vip_use = 1;
+        if (obj.vvip_use !== undefined) obj.vvip_use = 1;
+        if (obj.ad_status !== undefined) obj.ad_status = 0;
+
+        // 顶级会员字段统一注入
+        obj.isVip = 1;
+        obj.vip = 1;
+        obj.vipLevel = 2;
+        obj.vipExpire = 9999999999;
+        obj.memberExpire = 9999999999;
+        obj.not_ad_vip_expired_time = 9999999999;
+        obj.user_type = 2;
+        obj.vip_status = 1;
+        obj.is_member = 1;
     }
 
-    // VIP 显示暴力注入
-    if (data.user_vip_info) {
-        data.user_vip_info.user_type = 2;
-        data.user_vip_info.vip_expired_time = 9999999999;
-        data.user_vip_info.not_ad_vip_expired_time = 9999999999;
-        data.user_vip_info.vip_expired_time_format = "永久会员";
+    // 处理数组（albumcatelist等）
+    if (Array.isArray(obj)) {
+        obj.forEach(item => unlockVIP(item));
     }
 
-    // 所有可能影响显示的顶级字段
-    data.isVip = 1;
-    data.vip = 1;
-    data.vipLevel = 2;
-    data.vipExpire = 9999999999;
-    data.memberExpire = 9999999999;
-    data.not_ad_vip_expired_time = 9999999999;
-    data.user_type = 2;
-    data.vip_status = 1;
-    data.is_member = 1;
-    data.member_status = 1;
-    data.vip_type = 2;
-    data.is_vip = 1;
-    data.svip = 1;
+    // 处理嵌套对象
+    for (let key in obj) {
+        if (typeof obj[key] === 'object' && obj[key] !== null) {
+            unlockVIP(obj[key]);
+        }
+    }
 }
+
+// 执行统一处理
+unlockVIP(obj);
 
 $done({ body: JSON.stringify(obj) });
