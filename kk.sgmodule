@@ -1,0 +1,20 @@
+#!name=KK键盘 - 解锁无限变声
+#!desc=无限变声 + VIP解锁 | 支持pvoiceDetail | 更新2026-05-27
+#!category=工具
+# @Nzmgs
+
+[MITM]
+hostname = %APPEND% kk.weshine.im
+
+[Script]
+# KK键盘 - 次数查询/消耗
+KK键盘-次数 = type=http-response, pattern=^https?:\/\/kk\.weshine\.im\/v1\.0\/text2voice\/(checkCount|consumeCount), requires-body=1, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/kk-voice.js, timeout=60
+
+# KK键盘 - 创建音频
+KK键盘-创建音频 = type=http-response, pattern=^https?:\/\/kk\.weshine\.im\/v1\.0\/text2voice\/createTtsAudio, requires-body=1, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/kk-voice.js, timeout=60
+
+# KK键盘 - 账号/VIP信息
+KK键盘-账号 = type=http-response, pattern=^https?:\/\/kk\.weshine\.im\/v1\.0\/(user|account|profile|vip), requires-body=1, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/kk-voice.js, timeout=60
+
+# KK键盘 - 语音包详情（新增）
+KK键盘-pvoiceDetail = type=http-response, pattern=^https?:\/\/kk\.weshine\.im\/v1\.0\/text2voice\/pvoiceDetail, requires-body=1, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/kk-voice.js, timeout=60
