@@ -1,40 +1,52 @@
-// KK键盘 - 精准版（只修改必要字段）
+// KK键盘 无限变声 + VIP 解锁（永久会员显示优化版）
 let body = $response.body;
 let obj = JSON.parse(body);
 
-if (obj && obj.data) {
-    let data = obj.data;
+if (obj.data) {
+    // ==================== 次数相关 ====================
+    if (obj.data.totalCount !== undefined) obj.data.totalCount = 999;
+    if (obj.data.currCount !== undefined) obj.data.currCount = 999;
+    if (obj.data.tutorialCount !== undefined) obj.data.tutorialCount = 999;
+    if (obj.data.freeCount !== undefined) obj.data.freeCount = 999;
+    if (obj.data.leftCount !== undefined) obj.data.leftCount = 999;
 
-    // 1. 次数 + 基础功能
-    if (data.totalCount !== undefined) data.totalCount = 999;
-    if (data.currCount !== undefined) data.currCount = 999;
-    if (data.freeCount !== undefined) data.freeCount = 999;
-
-    // 2. 语音包/表情包
-    if (data.vip_use !== undefined) data.vip_use = 1;
-    if (data.vvip_use !== undefined) data.vvip_use = 1;
-
-    // 3. 数组处理
-    if (Array.isArray(data)) {
-        data.forEach(item => {
-            if (item.vip_use !== undefined) item.vip_use = 1;
-            if (item.vvip_use !== undefined) item.vvip_use = 1;
-        });
+    // ==================== VIP 核心解锁 + 显示优化 ====================
+    if (obj.data.user_vip_info) {
+        obj.data.user_vip_info.user_type = 2;
+        obj.data.user_vip_info.vip_expired_time = 9999999999;
+        obj.data.user_vip_info.not_ad_vip_expired_time = 9999999999;
+        obj.data.user_vip_info.vip_expired_time_format = "永久会员";   // 关键显示字段
     }
 
-    // 4. 关键VIP处理（精简到最少）
-    if (data.user_vip_info) {
-        data.user_vip_info.user_type = 2;
-        data.user_vip_info.vip_expired_time = 9999999999;
-        data.user_vip_info.not_ad_vip_expired_time = 9999999999;
-        data.user_vip_info.vip_expired_time_format = "永久会员";
+    // goodslist 接口 user_info 里的 VIP
+    if (obj.data.user_info && obj.data.user_info.user_vip_info) {
+        obj.data.user_info.user_vip_info.user_type = 2;
+        obj.data.user_info.user_vip_info.vip_expired_time = 9999999999;
+        obj.data.user_info.user_vip_info.not_ad_vip_expired_time = 9999999999;
+        obj.data.user_info.user_vip_info.vip_expired_time_format = "永久会员";
     }
 
-    // 5. 只保留最核心的顶级字段
-    data.isVip = 1;
-    data.vip = 1;
-    data.vipLevel = 2;
-    data.not_ad_vip_expired_time = 9999999999;
+    // pvoiceDetail 专属
+    if (obj.data.vip_use !== undefined) obj.data.vip_use = 1;
+    if (obj.data.user && obj.data.user.user_vip_info) {
+        obj.data.user.user_vip_info.user_type = 2;
+        obj.data.user.user_vip_info.vip_expired_time = 9999999999;
+        obj.data.user.user_vip_info.not_ad_vip_expired_time = 9999999999;
+        obj.data.user.user_vip_info.vip_expired_time_format = "永久会员";
+    }
+
+    // goodslist 专属字段
+    if (obj.data.is_subscribe !== undefined) obj.data.is_subscribe = 1;
+    if (obj.data.is_show !== undefined) obj.data.is_show = false;
+    if (obj.data.is_show_oneday_vip !== undefined) obj.data.is_show_oneday_vip = false;
+
+    // 通用VIP加强
+    obj.data.isVip = 1;
+    obj.data.vip = 1;
+    obj.data.vipLevel = 2;
+    obj.data.vipExpire = 9999999999;
+    obj.data.memberExpire = 9999999999;
+    obj.data.not_ad_vip_expired_time = 9999999999;
 }
 
 $done({ body: JSON.stringify(obj) });
