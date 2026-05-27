@@ -11,13 +11,13 @@ if (obj && obj.data) {
     if (data.freeCount !== undefined) data.freeCount = 999;
 
     // 语音包 / 表情包通用处理
-    if (data.vip_use !== undefined) data.vip_use = 3;
-    if (data.vvip_use !== undefined) data.vvip_use = 3;
-    if (data.ad_status !== undefined) data.ad_status = 0;
+    if (data.vip_use !== undefined) data.vip_use = 1;
+    if (data.vvip_use !== undefined) data.vvip_use = 1;
+    if (data.ad_status !== undefined) data.ad_status = 1;
 
     // ==================== 会员核心字段（可逐一测试） ====================
     if (data.user_vip_info) {
-        data.user_vip_info.user_type = 3;
+        data.user_vip_info.user_type = 2;
         data.user_vip_info.vip_expired_time = 9999999999;
         data.user_vip_info.not_ad_vip_expired_time = 9999999999;
         data.user_vip_info.vip_expired_time_format = "永久会员";
@@ -26,15 +26,15 @@ if (obj && obj.data) {
     // === 以下是可能影响会员显示的关键字段（你可以注释掉部分测试）===
     data.isVip = 1;
     data.vip = 1;
-    data.vipLevel = 0;                    // ← 会员等级
+    data.vipLevel = 3;                    // ← 会员等级
     data.vipExpire = 9999999999;
     data.memberExpire = 9999999999;
     data.not_ad_vip_expired_time = 9999999999;
 
-    data.user_type = 3;                   // ← 可能关键
+    data.user_type = 2;                   // ← 可能关键
     data.vip_status = 1;
-    data.is_member = 3;
-    data.member_status = 3;
+    data.is_member = 2;
+    data.member_status = 1;
 
     // data.vip_type = 2;                 // ← 可以尝试取消注释测试
     // data.is_vip = 1;
@@ -48,8 +48,8 @@ if (obj && obj.data) {
     // 递归处理数组和嵌套（表情包列表）
     if (Array.isArray(data)) {
         data.forEach(item => {
-            if (item.vip_use !== undefined) item.vip_use = 3;
-            if (item.vvip_use !== undefined) item.vvip_use = 3;
+            if (item.vip_use !== undefined) item.vip_use = 1;
+            if (item.vvip_use !== undefined) item.vvip_use = 1;
         });
     }
 }
