@@ -17,28 +17,19 @@ if (obj && obj.data) {
 
     // ==================== 会员核心字段（可逐一测试） ====================
     if (data.user_vip_info) {
-        data.user_vip_info.user_type = 3;
+        data.user_vip_info.user_type = 0;
         data.user_vip_info.vip_expired_time = 9999999999;
         data.user_vip_info.not_ad_vip_expired_time = 9999999999;
         data.user_vip_info.vip_expired_time_format = "永久会员";
     }
 
     // === 以下是可能影响会员显示的关键字段（你可以注释掉部分测试）===
-    data.isVip = 1;
-    data.vip = 1;
-    data.vipLevel = 10;                    // ← 会员等级
+    data.isVip = 0;
+    data.vip = 0;
+    data.vipLevel = 0;                    // ← 会员等级
     data.vipExpire = 9999999999;
     data.memberExpire = 9999999999;
     data.not_ad_vip_expired_time = 9999999999;
-
-    data.user_type = 3;                   // ← 可能关键
-    data.vip_status = 1;
-    data.is_member = 3;
-    data.member_status = 1;
-
-    data.vip_type = 1;                 // ← 可以尝试取消注释测试
-    data.is_vip = 1;
-    data.svip = 1;
 
     // kkshow_user（表情包/装扮可能依赖）
     if (data.kkshow_user) {
