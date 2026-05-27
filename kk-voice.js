@@ -26,19 +26,19 @@ if (obj && obj.data) {
     // === 以下是可能影响会员显示的关键字段（你可以注释掉部分测试）===
     data.isVip = 1;
     data.vip = 1;
-    data.vipLevel = 1;                    // ← 会员等级
+    data.vipLevel = 10;                    // ← 会员等级
     data.vipExpire = 9999999999;
     data.memberExpire = 9999999999;
     data.not_ad_vip_expired_time = 9999999999;
 
-    data.user_type = 1;                   // ← 可能关键
-    data.vip_status = 0;
-    data.is_member = 2;
-    data.member_status = 2;
+    data.user_type = 3;                   // ← 可能关键
+    data.vip_status = 1;
+    data.is_member = 3;
+    data.member_status = 3;
 
-    // data.vip_type = 2;                 // ← 可以尝试取消注释测试
-    // data.is_vip = 1;
-    // data.svip = 1;
+    data.vip_type = 1;                 // ← 可以尝试取消注释测试
+    data.is_vip = 1;
+    data.svip = 1;
 
     // kkshow_user（表情包/装扮可能依赖）
     if (data.kkshow_user) {
