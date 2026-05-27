@@ -10,20 +10,29 @@ if (obj.data) {
     if (obj.data.freeCount !== undefined) obj.data.freeCount = 999;
     if (obj.data.leftCount !== undefined) obj.data.leftCount = 999;
 
-    // ==================== VIP 解锁（关键修改）===================
+    // ==================== VIP 核心解锁 ====================
     if (obj.data.user_vip_info) {
-        obj.data.user_vip_info.user_type = 2;           // 改为高级会员
+        obj.data.user_vip_info.user_type = 2;
         obj.data.user_vip_info.vip_expired_time = 9999999999;
         obj.data.user_vip_info.not_ad_vip_expired_time = 9999999999;
     }
 
-    // 通用VIP字段加强
+    // pvoiceDetail 专属处理
+    if (obj.data.vip_use !== undefined) {
+        obj.data.vip_use = 1;                    // 允许使用
+    }
+    if (obj.data.user && obj.data.user.user_vip_info) {
+        obj.data.user.user_vip_info.user_type = 2;
+        obj.data.user.user_vip_info.vip_expired_time = 9999999999;
+        obj.data.user.user_vip_info.not_ad_vip_expired_time = 9999999999;
+    }
+
+    // 通用VIP加强
     obj.data.isVip = 1;
     obj.data.vip = 1;
     obj.data.vipLevel = 2;
     obj.data.vipExpire = 9999999999;
     obj.data.memberExpire = 9999999999;
-    obj.data.expireTime = 9999999999;
     obj.data.not_ad_vip_expired_time = 9999999999;
 }
 
