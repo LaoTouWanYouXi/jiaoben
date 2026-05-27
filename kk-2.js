@@ -27,7 +27,7 @@ if (obj.data) {
     }
 
     // pvoiceDetail 专属
-    if (obj.data.vip_use !== undefined) obj.data.vip_use = 1;
+    if (obj.data.vip_use !== undefined) obj.data.vip_use = 2;
     if (obj.data.user && obj.data.user.user_vip_info) {
         obj.data.user.user_vip_info.user_type = 3;
         obj.data.user.user_vip_info.vip_expired_time = 9999999999;
@@ -37,13 +37,13 @@ if (obj.data) {
 
     // goodslist 专属字段
     if (obj.data.is_subscribe !== undefined) obj.data.is_subscribe = 1;
-    if (obj.data.is_show !== undefined) obj.data.is_show = false;
-    if (obj.data.is_show_oneday_vip !== undefined) obj.data.is_show_oneday_vip = false;
+    if (obj.data.is_show !== undefined) obj.data.is_show = true;
+    if (obj.data.is_show_oneday_vip !== undefined) obj.data.is_show_oneday_vip = true;
 
     // 通用VIP加强
     obj.data.isVip = 1;
     obj.data.vip = 1;
-    obj.data.vipLevel = 3;
+    obj.data.vipLevel = 5;
     obj.data.vipExpire = 9999999999;
     obj.data.memberExpire = 9999999999;
     obj.data.not_ad_vip_expired_time = 9999999999;
