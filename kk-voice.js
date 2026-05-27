@@ -1,50 +1,42 @@
-// KK键盘 无限变声 + VIP 全面强制解锁（激进版）
+// KK键盘 稳定解锁版 - 避免崩溃
 let body = $response.body;
 let obj = JSON.parse(body);
 
-if (obj.data) {
-    // 强制覆盖所有可能存在的VIP字段
-    if (typeof obj.data === 'object') {
-        // 顶级字段
-        obj.data.isVip = 1;
-        obj.data.vip = 1;
-        obj.data.vipLevel = 2;
-        obj.data.vipExpire = 9999999999;
-        obj.data.memberExpire = 9999999999;
-        obj.data.not_ad_vip_expired_time = 9999999999;
-        obj.data.user_type = 2;
-        obj.data.vip_status = 1;
-        obj.data.is_member = 1;
-        obj.data.member_status = 1;
-        obj.data.expire_time = 9999999999;
+if (obj && obj.data) {
+    let data = obj.data;
 
-        // user_vip_info
-        if (obj.data.user_vip_info) {
-            obj.data.user_vip_info.user_type = 2;
-            obj.data.user_vip_info.vip_expired_time = 9999999999;
-            obj.data.user_vip_info.not_ad_vip_expired_time = 9999999999;
-            obj.data.user_vip_info.vip_expired_time_format = "永久会员";
-        }
+    // 基础次数解锁
+    if (data.totalCount !== undefined) data.totalCount = 999;
+    if (data.currCount !== undefined) data.currCount = 999;
+    if (data.freeCount !== undefined) data.freeCount = 999;
+    if (data.leftCount !== undefined) data.leftCount = 999;
 
-        // user_info 嵌套
-        if (obj.data.user_info) {
-            if (obj.data.user_info.user_vip_info) {
-                obj.data.user_info.user_vip_info.user_type = 2;
-                obj.data.user_info.user_vip_info.vip_expired_time = 9999999999;
-                obj.data.user_info.user_vip_info.not_ad_vip_expired_time = 9999999999;
-                obj.data.user_info.user_vip_info.vip_expired_time_format = "永久会员";
-            }
-        }
-
-        // kkshow_user
-        if (obj.data.kkshow_user) {
-            obj.data.kkshow_user.role_id = 3;
-        }
+    // VIP 核心字段（保守处理）
+    if (data.user_vip_info) {
+        data.user_vip_info.user_type = 2;
+        data.user_vip_info.vip_expired_time = 9999999999;
+        data.user_vip_info.not_ad_vip_expired_time = 9999999999;
     }
 
-    // 处理数组类型（短语列表等）
-    if (Array.isArray(obj.data)) {
-        obj.data.forEach(item => {
+    if (data.user_info && data.user_info.user_vip_info) {
+        data.user_info.user_vip_info.user_type = 2;
+        data.user_info.user_vip_info.vip_expired_time = 9999999999;
+        data.user_info.user_vip_info.not_ad_vip_expired_time = 9999999999;
+    }
+
+    // 通用字段
+    data.isVip = 1;
+    data.vip = 1;
+    data.vipLevel = 2;
+    data.vipExpire = 9999999999;
+    data.not_ad_vip_expired_time = 9999999999;
+
+    // 列表类接口处理
+    if (data.vip_use !== undefined) data.vip_use = 1;
+    if (data.vvip_use !== undefined) data.vvip_use = 1;
+
+    if (Array.isArray(data)) {
+        data.forEach(item => {
             if (item.vip_use !== undefined) item.vip_use = 1;
             if (item.vvip_use !== undefined) item.vvip_use = 1;
             if (Array.isArray(item.list)) {
@@ -55,10 +47,6 @@ if (obj.data) {
             }
         });
     }
-
-    // 单层字段
-    if (obj.data.vip_use !== undefined) obj.data.vip_use = 1;
-    if (obj.data.vvip_use !== undefined) obj.data.vvip_use = 1;
 }
 
 $done({ body: JSON.stringify(obj) });
