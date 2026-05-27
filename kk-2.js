@@ -12,7 +12,7 @@ if (obj.data) {
 
     // ==================== VIP 核心解锁 + 显示优化 ====================
     if (obj.data.user_vip_info) {
-        obj.data.user_vip_info.user_type = 2;
+        obj.data.user_vip_info.user_type = 3;
         obj.data.user_vip_info.vip_expired_time = 9999999999;
         obj.data.user_vip_info.not_ad_vip_expired_time = 9999999999;
         obj.data.user_vip_info.vip_expired_time_format = "永久会员";   // 关键显示字段
@@ -20,7 +20,7 @@ if (obj.data) {
 
     // goodslist 接口 user_info 里的 VIP
     if (obj.data.user_info && obj.data.user_info.user_vip_info) {
-        obj.data.user_info.user_vip_info.user_type = 2;
+        obj.data.user_info.user_vip_info.user_type = 3;
         obj.data.user_info.user_vip_info.vip_expired_time = 9999999999;
         obj.data.user_info.user_vip_info.not_ad_vip_expired_time = 9999999999;
         obj.data.user_info.user_vip_info.vip_expired_time_format = "永久会员";
@@ -29,7 +29,7 @@ if (obj.data) {
     // pvoiceDetail 专属
     if (obj.data.vip_use !== undefined) obj.data.vip_use = 1;
     if (obj.data.user && obj.data.user.user_vip_info) {
-        obj.data.user.user_vip_info.user_type = 2;
+        obj.data.user.user_vip_info.user_type = 3;
         obj.data.user.user_vip_info.vip_expired_time = 9999999999;
         obj.data.user.user_vip_info.not_ad_vip_expired_time = 9999999999;
         obj.data.user.user_vip_info.vip_expired_time_format = "永久会员";
@@ -43,7 +43,7 @@ if (obj.data) {
     // 通用VIP加强
     obj.data.isVip = 1;
     obj.data.vip = 1;
-    obj.data.vipLevel = 2;
+    obj.data.vipLevel = 3;
     obj.data.vipExpire = 9999999999;
     obj.data.memberExpire = 9999999999;
     obj.data.not_ad_vip_expired_time = 9999999999;
