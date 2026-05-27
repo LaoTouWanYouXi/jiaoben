@@ -7,14 +7,4 @@
 hostname = %APPEND% kk.weshine.im
 
 [Script]
-# KK键盘 - 次数查询/消耗
-KK键盘-次数 = type=http-response, pattern=^https?:\/\/kk\.weshine\.im\/v1\.0\/text2voice\/(checkCount|consumeCount), requires-body=1, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/kk-voice.js, timeout=60
-
-# KK键盘 - 创建音频
-KK键盘-创建音频 = type=http-response, pattern=^https?:\/\/kk\.weshine\.im\/v1\.0\/text2voice\/createTtsAudio, requires-body=1, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/kk-voice.js, timeout=60
-
-# 账号Profile（会员显示）
-KK键盘-账号 = type=http-response, pattern=^https?:\/\/kk\.weshine\.im\/v1\.0\/account\/profile, requires-body=1, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/kk-voice.js, timeout=60
-
-# 语音包详情
-KK键盘-语音包 = type=http-response, pattern=^https?:\/\/kk\.weshine\.im\/v1\.0\/.*pvoiceDetail, requires-body=1, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/kk-voice.js, timeout=60
+KK键盘-统一 = type=http-response, pattern=^https?:\/\/kk\.weshine\.im\/v[0-9]+\., requires-body=1, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/kk-voice.js, timeout=60
