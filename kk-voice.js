@@ -13,7 +13,7 @@ if (obj && obj.data) {
     // 语音包 / 表情包通用处理
     if (data.vip_use !== undefined) data.vip_use = 1;
     if (data.vvip_use !== undefined) data.vvip_use = 1;
-    if (data.ad_status !== undefined) data.ad_status = 1;
+    if (data.ad_status !== undefined) data.ad_status = 0;
 
     // ==================== 会员核心字段（可逐一测试） ====================
     if (data.user_vip_info) {
