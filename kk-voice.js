@@ -1,37 +1,44 @@
-// KK键盘 稳定解锁版 - 避免崩溃
+// KK键盘 - 次数 + VIP加强版
 let body = $response.body;
 let obj = JSON.parse(body);
 
 if (obj && obj.data) {
     let data = obj.data;
 
-    // 基础次数解锁
+    // 次数恢复
     if (data.totalCount !== undefined) data.totalCount = 999;
     if (data.currCount !== undefined) data.currCount = 999;
     if (data.freeCount !== undefined) data.freeCount = 999;
     if (data.leftCount !== undefined) data.leftCount = 999;
 
-    // VIP 核心字段（保守处理）
+    // VIP 强力注入
     if (data.user_vip_info) {
         data.user_vip_info.user_type = 2;
         data.user_vip_info.vip_expired_time = 9999999999;
         data.user_vip_info.not_ad_vip_expired_time = 9999999999;
+        data.user_vip_info.vip_expired_time_format = "永久会员";
     }
 
-    if (data.user_info && data.user_info.user_vip_info) {
-        data.user_info.user_vip_info.user_type = 2;
-        data.user_info.user_vip_info.vip_expired_time = 9999999999;
-        data.user_info.user_vip_info.not_ad_vip_expired_time = 9999999999;
-    }
-
-    // 通用字段
+    // 顶级字段强刷
     data.isVip = 1;
     data.vip = 1;
     data.vipLevel = 2;
     data.vipExpire = 9999999999;
+    data.memberExpire = 9999999999;
     data.not_ad_vip_expired_time = 9999999999;
+    data.user_type = 2;
+    data.vip_status = 1;
+    data.is_member = 1;
 
-    // 列表类接口处理
+    // 处理嵌套 user_info
+    if (data.user_info && data.user_info.user_vip_info) {
+        data.user_info.user_vip_info.user_type = 2;
+        data.user_info.user_vip_info.vip_expired_time = 9999999999;
+        data.user_info.user_vip_info.not_ad_vip_expired_time = 9999999999;
+        data.user_info.user_vip_info.vip_expired_time_format = "永久会员";
+    }
+
+    // 列表处理
     if (data.vip_use !== undefined) data.vip_use = 1;
     if (data.vvip_use !== undefined) data.vvip_use = 1;
 
