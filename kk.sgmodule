@@ -27,3 +27,6 @@ KK键盘-goodslist = type=http-response, pattern=^https?:\/\/kk\.weshine\.im\/v2
 
 # KK键盘 - 短语专辑列表（重要）
 KK键盘-albumcatelist = type=http-response, pattern=^https?:\/\/kk\.weshine\.im\/v3\.0\/phrase\/albumcatelist, requires-body=1, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/kk-voice.js, timeout=60
+
+# KK键盘 - 账号Profile（会员核心接口）
+KK键盘-账号 = type=http-response, pattern=^https?:\/\/kk\.weshine\.im\/v1\.0\/account\/profile, requires-body=1, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/kk-voice.js, timeout=60
