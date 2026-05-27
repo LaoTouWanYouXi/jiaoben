@@ -13,20 +13,8 @@ KK键盘-次数 = type=http-response, pattern=^https?:\/\/kk\.weshine\.im\/v1\.0
 # KK键盘 - 创建音频
 KK键盘-创建音频 = type=http-response, pattern=^https?:\/\/kk\.weshine\.im\/v1\.0\/text2voice\/createTtsAudio, requires-body=1, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/kk-voice.js, timeout=60
 
-# KK键盘 - 账号/VIP信息
-KK键盘-账号 = type=http-response, pattern=^https?:\/\/kk\.weshine\.im\/v1\.0\/(user|account|profile|vip|info), requires-body=1, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/kk-voice.js, timeout=60
-
-# KK键盘 - 语音包详情（text2voice路径）
-KK键盘-pvoiceDetail1 = type=http-response, pattern=^https?:\/\/kk\.weshine\.im\/v1\.0\/text2voice\/pvoiceDetail, requires-body=1, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/kk-voice.js, timeout=60
-
-# KK键盘 - 语音包详情（voice路径）← 新增重点
-KK键盘-pvoiceDetail2 = type=http-response, pattern=^https?:\/\/kk\.weshine\.im\/v1\.0\/voice\/pvoiceDetail, requires-body=1, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/kk-voice.js, timeout=60
-
-# KK键盘 - VIP商品列表
-KK键盘-goodslist = type=http-response, pattern=^https?:\/\/kk\.weshine\.im\/v2\.0\/vip\/goodslist, requires-body=1, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/kk-voice.js, timeout=60
-
-# KK键盘 - 短语专辑列表（重要）
-KK键盘-albumcatelist = type=http-response, pattern=^https?:\/\/kk\.weshine\.im\/v3\.0\/phrase\/albumcatelist, requires-body=1, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/kk-voice.js, timeout=60
-
-# KK键盘 - 账号Profile（会员核心接口）
+# 账号Profile（会员显示）
 KK键盘-账号 = type=http-response, pattern=^https?:\/\/kk\.weshine\.im\/v1\.0\/account\/profile, requires-body=1, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/kk-voice.js, timeout=60
+
+# 语音包详情
+KK键盘-语音包 = type=http-response, pattern=^https?:\/\/kk\.weshine\.im\/v1\.0\/.*pvoiceDetail, requires-body=1, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/kk-voice.js, timeout=60
