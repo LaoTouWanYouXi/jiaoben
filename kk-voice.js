@@ -11,7 +11,6 @@ if (obj.data) {
     if (obj.data.leftCount !== undefined) obj.data.leftCount = 999;
 
     // ==================== VIP 核心解锁 ====================
-    // 处理 user_vip_info（多个接口都有）
     if (obj.data.user_vip_info) {
         obj.data.user_vip_info.user_type = 2;
         obj.data.user_vip_info.vip_expired_time = 9999999999;
@@ -19,25 +18,22 @@ if (obj.data) {
         obj.data.user_vip_info.vip_expired_time_format = "永久会员";
     }
 
-    // 处理 user_info 里的 user_vip_info（goodslist接口）
-    if (obj.data.user_info && obj.data.user_info.user_vip_info) {
-        obj.data.user_info.user_vip_info.user_type = 2;
-        obj.data.user_info.user_vip_info.vip_expired_time = 9999999999;
-        obj.data.user_info.user_vip_info.not_ad_vip_expired_time = 9999999999;
+    // pvoiceDetail 专属处理（支持 /voice/ 和 /text2voice/）
+    if (obj.data.vip_use !== undefined) {
+        obj.data.vip_use = 1;
     }
-
-    // pvoiceDetail 专属
-    if (obj.data.vip_use !== undefined) obj.data.vip_use = 1;
     if (obj.data.user && obj.data.user.user_vip_info) {
         obj.data.user.user_vip_info.user_type = 2;
         obj.data.user.user_vip_info.vip_expired_time = 9999999999;
         obj.data.user.user_vip_info.not_ad_vip_expired_time = 9999999999;
     }
 
-    // goodslist 接口专属
-    if (obj.data.is_subscribe !== undefined) obj.data.is_subscribe = 1;
-    if (obj.data.is_show_oneday_vip !== undefined) obj.data.is_show_oneday_vip = false;
-    if (obj.data.is_show !== undefined) obj.data.is_show = false;
+    // goodslist 接口
+    if (obj.data.user_info && obj.data.user_info.user_vip_info) {
+        obj.data.user_info.user_vip_info.user_type = 2;
+        obj.data.user_info.user_vip_info.vip_expired_time = 9999999999;
+        obj.data.user_info.user_vip_info.not_ad_vip_expired_time = 9999999999;
+    }
 
     // 通用VIP加强
     obj.data.isVip = 1;
