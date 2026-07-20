@@ -1,8 +1,11 @@
 /**
  * 网上国网数据同步（Egern）
  *
+ * GitHub:
+ * https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/SGCC_Sync.js
+ *
  * 用途：定时或手动拉取电费数据，写入 ctx.storage 供小组件读取。
- * 建议：模块启用后，在 工具 → 脚本 中手动运行一次本脚本测试。
+ * 建议：启用 SGCC_Egern.sgmodule 后，手动运行一次本脚本测试。
  */
 
 const API_CANDIDATES = [

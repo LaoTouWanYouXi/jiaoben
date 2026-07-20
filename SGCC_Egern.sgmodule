@@ -1,15 +1,19 @@
 #!name=网上国网
-#!desc=Egern widget data source
-#!author=local
+#!desc=电费余额 / 用电量数据源。小组件脚本：https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/SGCC_Widget.JS
+#!author=LaoTouWanYouXi
+#!icon=bolt.square.fill
+#!category=Widget
+#!arguments=USERNAME:"",PASSWORD:"",TIMEOUT:60
+#!arguments-desc=USERNAME: 网上国网登录账号（手机号）\nPASSWORD: 登录密码\nTIMEOUT: 脚本超时秒数，建议 60
 
 [Script]
-网上国网接口重写 = type=http-request, pattern=^https?:\/\/api\.wsgw-rewrite\.com\/electricity\/bill\/all, script-path=https://raw.githubusercontent.com/Yuheng0101/X/main/Tasks/95598/95598.js, requires-body=false, max-size=5242880, timeout=60, argument=username="{{{USERNAME}}}"&password="{{{PASSWORD}}}"&service=true
+网上国网接口重写 = type=http-request, pattern=^https?:\/\/api\.wsgw-rewrite\.com\/electricity\/bill\/all, script-path=https://raw.githubusercontent.com/Yuheng0101/X/main/Tasks/95598/95598.js, requires-body=false, max-size=5242880, timeout={{{TIMEOUT}}}, argument=username="{{{USERNAME}}}"&password="{{{PASSWORD}}}"&service=true
 
-网上国网定时同步 = type=cron, cronexp="0 9,21 * * *", script-path=SGCC_Sync.js, timeout=60
+网上国网定时同步 = type=cron, cronexp="0 9,21 * * *", script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/SGCC_Sync.js, timeout={{{TIMEOUT}}}
+
+网上国网手动同步 = type=generic, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/SGCC_Sync.js, timeout={{{TIMEOUT}}}
+
+网上国网小组件 = type=generic, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/SGCC_Widget.JS, timeout={{{TIMEOUT}}}
 
 [MITM]
 hostname = %APPEND% api.wsgw-rewrite.com
-
-[Argument]
-USERNAME=input,"",tag=账号,desc=网上国网登录手机号
-PASSWORD=input,"",tag=密码,desc=网上国网登录密码

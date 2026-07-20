@@ -1,7 +1,10 @@
 /**
  * 网上国网用电小组件（Egern）
  *
- * 依赖：启用 SGCC_Egern.yaml 模块，并至少成功运行一次 SGCC_Sync.js
+ * GitHub:
+ * https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/SGCC_Widget.JS
+ *
+ * 依赖：启用 SGCC_Egern.sgmodule，并至少成功运行一次 SGCC_Sync.js
  *
  *# ── 环境变量 ──
  * Index: "0"     多户号下标，默认 0
@@ -10,7 +13,7 @@
  * 排错顺序：
  * 1. 模块里填好 USERNAME / PASSWORD
  * 2. MITM 已开启且证书已信任
- * 3. 手动运行「网上国网同步」脚本，确认通知显示同步成功
+ * 3. 手动运行「网上国网手动同步」，确认通知显示同步成功
  * 4. 再刷新小组件（保持 VPN 开启）
  */
 
