@@ -1,0 +1,15 @@
+#!name=网上国网
+#!desc=Egern widget data source
+#!author=local
+
+[Script]
+网上国网接口重写 = type=http-request, pattern=^https?:\/\/api\.wsgw-rewrite\.com\/electricity\/bill\/all, script-path=https://raw.githubusercontent.com/Yuheng0101/X/main/Tasks/95598/95598.js, requires-body=false, max-size=5242880, timeout=60, argument=username="{{{USERNAME}}}"&password="{{{PASSWORD}}}"&service=true
+
+网上国网定时同步 = type=cron, cronexp="0 9,21 * * *", script-path=SGCC_Sync.js, timeout=60
+
+[MITM]
+hostname = %APPEND% api.wsgw-rewrite.com
+
+[Argument]
+USERNAME=input,"",tag=账号,desc=网上国网登录手机号
+PASSWORD=input,"",tag=密码,desc=网上国网登录密码
