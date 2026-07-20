@@ -1,20 +1,26 @@
 /**
  * 网上国网用电小组件（Egern）
  *
- * 依赖：需先启用「网上国网」模块（SGCC_Egern.yaml），由模块拦截并返回数据。
+ * 依赖：启用 SGCC_Egern.yaml 模块，并至少成功运行一次 SGCC_Sync.js
  *
- *# ── 环境变量配置 ──
- * Index: "0"          （多户号时填写下标，默认 0）
- * ApiUrl: ""          （可选，默认走重写接口）
+ *# ── 环境变量 ──
+ * Index: "0"     多户号下标，默认 0
+ * ApiUrl: ""     留空则自动尝试 http/https 重写地址
  *
- * 使用说明
- * 1. 工具 → 脚本 → 添加 generic 脚本，粘贴本文件；超时建议设为 60 秒
- * 2. 工具 → 模块 → 添加 SGCC_Egern.yaml，填写账号密码并启用
- * 3. 开启 MITM，信任 Egern CA；小组件刷新时保持 VPN 开启
- * 4. 分析 → 小组件画廊 → 添加本脚本对应小组件
+ * 排错顺序：
+ * 1. 模块里填好 USERNAME / PASSWORD
+ * 2. MITM 已开启且证书已信任
+ * 3. 手动运行「网上国网同步」脚本，确认通知显示同步成功
+ * 4. 再刷新小组件（保持 VPN 开启）
  */
 
-const DEFAULT_API = "https://api.wsgw-rewrite.com/electricity/bill/all";
+const DEFAULT_APIS = [
+  "http://api.wsgw-rewrite.com/electricity/bill/all",
+  "https://api.wsgw-rewrite.com/electricity/bill/all",
+];
+
+const CACHE_KEY = "sgcc_bill_all";
+const ERROR_KEY = "sgcc_widget_error";
 
 function toNum(v) {
   const n = parseFloat(v);
@@ -73,25 +79,114 @@ function pickBalance(info) {
 
 function parsePayload(raw, index) {
   const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
-  if (!list.length) throw new Error("接口无数据，请检查模块账号密码 / MITM");
+  if (!list.length) throw new Error("接口无数据");
 
   const idx = Math.max(0, parseInt(index || "0", 10) || 0);
   const info = list[idx] || list[0];
   if (!info) throw new Error("户号下标无效");
 
-  const dayList = pickDayList(info);
-  const yst = dayList.length ? dayList[dayList.length - 1].dayElePq : null;
-  const month = sumCurrentMonth(dayList);
+  if (info.__error) throw new Error(info.__error);
 
+  const dayList = pickDayList(info);
   return {
-    yst,
-    total: month,
+    yst: dayList.length ? dayList[dayList.length - 1].dayElePq : null,
+    total: sumCurrentMonth(dayList),
     bal: pickBalance(info),
   };
 }
 
+function explainError(status, body, fallback) {
+  const text = String(body || fallback || "").trim();
+  const lower = text.toLowerCase();
+
+  if (status === 400 || lower.includes("400")) {
+    if (text.includes("账号") || text.includes("密码") || text.includes("未配置")) {
+      return "模块未配置账号密码，请在模块 Env 填写 USERNAME/PASSWORD";
+    }
+    return "拦截失败(400)：请确认 MITM 已开、证书已信任，并手动运行「网上国网同步」";
+  }
+  if (lower.includes("body error")) {
+    return "响应异常：请先运行「网上国网同步」脚本，再刷新小组件";
+  }
+  if (text) return text.slice(0, 120);
+  return fallback || "未知错误";
+}
+
+async function fetchRemote(ctx, urls) {
+  let lastMsg = "网络请求失败";
+
+  for (const url of urls) {
+    try {
+      const resp = await ctx.http.get(url, { timeout: 55 });
+      const text = await resp.text();
+
+      if (resp.status >= 400) {
+        lastMsg = explainError(resp.status, text, `HTTP ${resp.status}`);
+        continue;
+      }
+
+      let raw;
+      try {
+        raw = JSON.parse(text);
+      } catch {
+        lastMsg = explainError(resp.status, text, "响应不是 JSON");
+        continue;
+      }
+
+      ctx.storage.setJSON(CACHE_KEY, { data: raw, time: Date.now(), source: url });
+      ctx.storage.delete(ERROR_KEY);
+      return raw;
+    } catch (e) {
+      lastMsg = explainError(0, "", e.message || String(e));
+    }
+  }
+
+  throw new Error(lastMsg);
+}
+
+async function loadBillData(ctx, index) {
+  const custom = (ctx.env.ApiUrl || "").trim();
+  const urls = custom ? [custom] : DEFAULT_APIS;
+
+  const cached = ctx.storage.getJSON(CACHE_KEY);
+  const cacheAgeMs = cached?.time ? Date.now() - cached.time : Infinity;
+  const cacheFresh = cacheAgeMs < 6 * 60 * 60 * 1000;
+
+  if (cached?.data && cacheFresh) {
+    try {
+      return {
+        parsed: parsePayload(cached.data, index),
+        fromCache: true,
+        cacheTime: cached.time,
+      };
+    } catch {
+      // 缓存损坏则继续拉取
+    }
+  }
+
+  try {
+    const raw = await fetchRemote(ctx, urls);
+    return { parsed: parsePayload(raw, index), fromCache: false };
+  } catch (e) {
+    if (cached?.data) {
+      return {
+        parsed: parsePayload(cached.data, index),
+        fromCache: true,
+        cacheTime: cached.time,
+        stale: true,
+        warn: e.message,
+      };
+    }
+
+    const errCache = ctx.storage.getJSON(ERROR_KEY);
+    if (errCache?.message) {
+      throw new Error(`${e.message}；最近同步失败：${errCache.message}`);
+    }
+    throw e;
+  }
+}
+
 export default async function (ctx) {
-  const apiUrl = (ctx.env.ApiUrl || DEFAULT_API).trim() || DEFAULT_API;
   const index = (ctx.env.Index || "0").trim();
 
   const colors = {
@@ -101,6 +196,7 @@ export default async function (ctx) {
     value:     { light: "#1C1C1E", dark: "#FFFFFF" },
     time:      { light: "#999999", dark: "#666666" },
     error:     { light: "#FF3B30", dark: "#FF453A" },
+    warn:      { light: "#FF9500", dark: "#FF9F0A" },
     capsuleBg: { light: "#F5F5F7", dark: "#3A3A3C" },
     accent:    { light: "#007AFF", dark: "#0A84FF" },
   };
@@ -115,21 +211,23 @@ export default async function (ctx) {
   };
 
   try {
-    const resp = await ctx.http.get(apiUrl, { timeout: 55 });
-    const raw = await resp.json();
-    const parsed = parsePayload(raw, index);
-
-    data.yst.value = fmt(parsed.yst);
-    data.total.value = fmt(parsed.total);
-    data.bal.value = fmt(parsed.bal);
+    const result = await loadBillData(ctx, index);
+    data.yst.value = fmt(result.parsed.yst);
+    data.total.value = fmt(result.parsed.total);
+    data.bal.value = fmt(result.parsed.bal);
     data.updateTime = new Date().toLocaleTimeString("zh-CN", {
       hour: "2-digit",
       minute: "2-digit",
       timeZone: "Asia/Shanghai",
     });
+    if (result.stale && result.warn) {
+      data.debugInfo.push(`缓存数据(${result.warn})`);
+    } else if (result.fromCache) {
+      data.debugInfo.push("缓存");
+    }
   } catch (e) {
-    data.error = "请求失败";
-    data.debugInfo.push(`错误: ${e.message || e}`);
+    data.error = "获取失败";
+    data.debugInfo.push(explainError(0, "", e.message || String(e)));
   }
 
   function makeCapsule(title, value, unit, isNegative = false) {
@@ -206,11 +304,7 @@ export default async function (ctx) {
     return {
       type: "stack",
       direction: "row",
-      children: [
-        { type: "spacer" },
-        child,
-        { type: "spacer" },
-      ],
+      children: [{ type: "spacer" }, child, { type: "spacer" }],
     };
   }
 
@@ -224,10 +318,10 @@ export default async function (ctx) {
         },
         {
           type: "text",
-          text: (data.debugInfo && data.debugInfo[0]) || "请检查模块与 MITM",
+          text: data.debugInfo[0] || "请先运行网上国网同步脚本",
           font: { size: "caption2" },
           textColor: colors.time,
-          maxLines: 3,
+          maxLines: 4,
         },
       ]
     : [
@@ -255,7 +349,6 @@ export default async function (ctx) {
     backgroundColor: colors.bg,
     padding: isSmall ? [10, 12, 10, 12] : [10, 14, 10, 14],
     gap: isSmall ? 6 : 12,
-    // 国网有登录风控，刷新别太勤
     refreshAfter: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
     children: [
       {
@@ -308,9 +401,7 @@ export default async function (ctx) {
           },
         ],
       },
-
       ...bodyChildren,
-
       {
         type: "stack",
         direction: "row",

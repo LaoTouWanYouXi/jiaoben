@@ -1,18 +1,18 @@
 # 网上国网 · Egern 模块
 #
-# 安装步骤（按顺序）：
-# 1. 工具 → MITM → 生成并安装证书 → 系统设置里「证书信任设置」打开信任
-# 2. 工具 → 模块 → + → 选本地文件，添加本 YAML，启用模块
-# 3. 打开本模块，在参数里填写 USERNAME（手机号）和 PASSWORD
-# 4. 确认 MITM 主机名包含 api.wsgw-rewrite.com，主配置 MITM 已开启
-# 5. 添加 SGCC_Widget.JS 小组件（脚本超时建议 60 秒），刷新时保持 VPN 开启
+# 文件清单（放在同一目录）：
+#   SGCC_Egern.yaml   本模块
+#   SGCC_Sync.js      数据同步脚本
+#   SGCC_Widget.JS    小组件脚本
 #
-# 若本模块参数不生效，可改用官方 Surge 模块（Egern 支持直接添加）：
-# https://raw.githubusercontent.com/Yuheng0101/X/main/Tasks/95598/profiles/sgcc.surge.sgmodule
-# 在模块参数里同样填写 USERNAME / PASSWORD 即可。
+# 安装步骤：
+# 1. MITM 开启 + 安装并信任 Egern 证书
+# 2. 工具 → 模块 → 添加本 YAML → 填写 USERNAME / PASSWORD → 启用
+# 3. 工具 → 脚本 → 确认出现「网上国网同步」，手动运行一次
+# 4. 小组件添加 SGCC_Widget.JS，超时建议 60 秒
 
 name: "网上国网"
-description: "拦截电费查询接口，供 Egern 小组件读取余额与用电量"
+description: "拦截电费接口并同步数据到本地缓存，供小组件展示"
 author: "local"
 icon: "bolt.square.fill"
 
@@ -22,16 +22,35 @@ compat_arguments:
   TIMEOUT: 60
 
 compat_arguments_desc: |
-  USERNAME: 网上国网 / 95598.cn 登录账号（一般是手机号）
+  USERNAME: 网上国网 / 95598.cn 登录账号（手机号）
   PASSWORD: 登录密码
   TIMEOUT: 脚本超时秒数，建议 60
+
+env_schema:
+  USERNAME:
+    name: 网上国网账号
+    description: 登录手机号
+  PASSWORD:
+    name: 网上国网密码
+    description: 登录密码
+
+env:
+  SGCC_USERNAME: "{{{USERNAME}}}"
+  SGCC_PASSWORD: "{{{PASSWORD}}}"
+  username: "{{{USERNAME}}}"
+  password: "{{{PASSWORD}}}"
+
+rules:
+  - domain:
+      match: api.wsgw-rewrite.com
+    policy: DIRECT
 
 scriptings:
   - http_request:
       name: "网上国网接口重写"
       match: "^https?:\\/\\/api\\.wsgw-rewrite\\.com\\/electricity\\/bill\\/all"
       script_url: "https://raw.githubusercontent.com/Yuheng0101/X/main/Tasks/95598/95598.js"
-      body_required: true
+      body_required: false
       max_size: 5242880
       timeout: {{{TIMEOUT}}}
       env:
@@ -42,16 +61,28 @@ scriptings:
         password: "{{{PASSWORD}}}"
 
   - schedule:
-      name: "网上国网定时刷新"
-      cron: "0 9 * * *"
-      script_url: "https://raw.githubusercontent.com/Yuheng0101/X/main/Tasks/95598/95598.js"
+      name: "网上国网定时同步"
+      cron: "0 9,21 * * *"
+      script_url: "SGCC_Sync.js"
       timeout: {{{TIMEOUT}}}
-      env:
-        SGCC_USERNAME: "{{{USERNAME}}}"
-        SGCC_PASSWORD: "{{{PASSWORD}}}"
-        username: "{{{USERNAME}}}"
-        password: "{{{PASSWORD}}}"
+
+  - generic:
+      name: "sgcc-sync"
+      script_url: "SGCC_Sync.js"
+      timeout: {{{TIMEOUT}}}
+
+  - generic:
+      name: "sgcc-widget"
+      script_url: "SGCC_Widget.JS"
+      timeout: {{{TIMEOUT}}}
 
 mitm:
   hostnames:
-    - api.wsgw-rewrite.com
+    includes:
+      - api.wsgw-rewrite.com
+
+widgets:
+  - name: "sgcc-widget"
+    script_name: "sgcc-widget"
+    env:
+      Index: "0"
