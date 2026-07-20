@@ -17,9 +17,13 @@
  * 4. 再刷新小组件（保持 VPN 开启）
  */
 
+// 跳过 stepElecQuantity / lastYearElecQuantity，避免阶梯查询失败拖垮结果
+const QUERY =
+  "eleBill=1&dayElecQuantity=1&dayElecQuantity31=1&monthElecQuantity=1";
+
 const DEFAULT_APIS = [
-  "http://api.wsgw-rewrite.com/electricity/bill/all",
-  "https://api.wsgw-rewrite.com/electricity/bill/all",
+  `http://api.wsgw-rewrite.com/electricity/bill/all?${QUERY}`,
+  `https://api.wsgw-rewrite.com/electricity/bill/all?${QUERY}`,
 ];
 
 const CACHE_KEY = "sgcc_bill_all";
@@ -69,7 +73,10 @@ function sumCurrentMonth(dayList) {
 }
 
 function pickBalance(info) {
-  const bill = info?.eleBill || {};
+  const bill = info?.eleBill;
+  if (!bill || typeof bill !== "object" || !Object.keys(bill).length) {
+    return null; // 账单基础信息空 → 显示 --
+  }
   if (info?.arrearsOfFees) {
     const owe = toNum(bill.sumMoney);
     if (owe !== null) return -Math.abs(owe);
@@ -77,11 +84,18 @@ function pickBalance(info) {
   if (bill.accountBalance != null && String(bill.accountBalance).trim() !== "") {
     return bill.accountBalance;
   }
-  return bill.sumMoney;
+  return bill.sumMoney ?? null;
+}
+
+function normalizeList(raw) {
+  if (Array.isArray(raw)) return raw;
+  if (raw && Array.isArray(raw.data)) return raw.data;
+  if (raw && typeof raw === "object") return [raw];
+  return [];
 }
 
 function parsePayload(raw, index) {
-  const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  const list = normalizeList(raw);
   if (!list.length) throw new Error("接口无数据");
 
   const idx = Math.max(0, parseInt(index || "0", 10) || 0);
@@ -90,26 +104,38 @@ function parsePayload(raw, index) {
 
   if (info.__error) throw new Error(info.__error);
 
-  const dayList = pickDayList(info);
-  return {
-    yst: dayList.length ? dayList[dayList.length - 1].dayElePq : null,
-    total: sumCurrentMonth(dayList),
-    bal: pickBalance(info),
-  };
+  const days = pickDayList(info);
+  const bal = pickBalance(info);
+  const yst = days.length ? days[days.length - 1].dayElePq : null;
+  const total = sumCurrentMonth(days);
+
+  // 余额空但有用电量 → 仍算成功（国网账单接口常偶发失败）
+  if (bal == null && yst == null && total == null && !info.userInfo) {
+    throw new Error(`${idx}:账单基础信息空`);
+  }
+
+  return { yst, total, bal, billEmpty: bal == null };
 }
 
 function explainError(status, body, fallback) {
   const text = String(body || fallback || "").trim();
   const lower = text.toLowerCase();
 
+  if (text.includes("账单基础信息空")) {
+    return "余额接口暂无数据，可先看用电量；稍后重试同步";
+  }
+  if (text.includes("stepElecQuantity") || text.includes("缺省字段")) {
+    return "部分字段查询失败已跳过，请重新同步";
+  }
   if (status === 400 || lower.includes("400")) {
     if (text.includes("账号") || text.includes("密码") || text.includes("未配置")) {
-      return "模块未配置账号密码，请在模块 Env 填写 USERNAME/PASSWORD";
+      return "模块未配置账号密码，请填写 USERNAME/PASSWORD";
     }
-    return "拦截失败(400)：请确认 MITM 已开、证书已信任，并手动运行「网上国网同步」";
+    // 400 但 body 可能仍是业务 JSON，提示先同步
+    return "HTTP 400：若已配置账号，请手动运行同步；账单空时可稍后重试";
   }
   if (lower.includes("body error")) {
-    return "响应异常：请先运行「网上国网同步」脚本，再刷新小组件";
+    return "响应异常：请先运行「网上国网手动同步」";
   }
   if (text) return text.slice(0, 120);
   return fallback || "未知错误";
@@ -123,16 +149,34 @@ async function fetchRemote(ctx, urls) {
       const resp = await ctx.http.get(url, { timeout: 55 });
       const text = await resp.text();
 
-      if (resp.status >= 400) {
-        lastMsg = explainError(resp.status, text, `HTTP ${resp.status}`);
-        continue;
-      }
-
-      let raw;
+      let raw = null;
       try {
         raw = JSON.parse(text);
       } catch {
+        if (resp.status >= 400) {
+          lastMsg = explainError(resp.status, text, `HTTP ${resp.status}`);
+          continue;
+        }
         lastMsg = explainError(resp.status, text, "响应不是 JSON");
+        continue;
+      }
+
+      // 即使 status 400，只要 body 里有任一户号可用数据就接受
+      const list = normalizeList(raw);
+      const useful = list.some((info, i) => {
+        try {
+          parsePayload([info], "0");
+          return true;
+        } catch {
+          return !!(info && info.userInfo);
+        }
+      });
+      if (!useful) {
+        lastMsg = explainError(
+          resp.status,
+          list.length ? "0:账单基础信息空" : "接口无数据",
+          "接口无可用数据"
+        );
         continue;
       }
 
