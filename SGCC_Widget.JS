@@ -1,16 +1,11 @@
 /**
- * 网上国网用电小组件（Egern 手动导入）
+ * 网上国网用电小组件（Egern）
  *
  * 地址:
  * https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/SGCC_Widget.JS
  *
- * 添加方式：
- *   类型: generic
- *   超时: 30
- *   不必填账号
- *   然后在「小组件画廊」关联本脚本
- *
- * 依赖：先成功运行「同步」脚本写入缓存
+ * 添加：generic，不用填账号。
+ * 依赖：先成功运行 SGCC_Sync.js
  */
 
 const CACHE_KEY = "sgcc_bill_all";
