@@ -4,20 +4,15 @@
  * GitHub:
  * https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/SGCC_Widget.JS
  *
- * 依赖：启用 SGCC_Egern.sgmodule，并至少成功运行一次 SGCC_Sync.js
+ * 默认只读缓存（避免小组件刷新再打假接口导致 400）。
+ * 请先运行「网上国网手动同步」写入缓存。
  *
  *# ── 环境变量 ──
- * Index: "0"     多户号下标，默认 0
- * ApiUrl: ""     留空则自动尝试 http/https 重写地址
- *
- * 排错顺序：
- * 1. 模块里填好 USERNAME / PASSWORD
- * 2. MITM 已开启且证书已信任
- * 3. 手动运行「网上国网手动同步」，确认通知显示同步成功
- * 4. 再刷新小组件（保持 VPN 开启）
+ * Index: "0"
+ * Live: "0"     设为 "1" 才在小组件内联网（一般不需要）
+ * ApiUrl: ""    Live=1 时可选自定义地址
  */
 
-// 跳过 stepElecQuantity / lastYearElecQuantity，避免阶梯查询失败拖垮结果
 const QUERY =
   "eleBill=1&dayElecQuantity=1&dayElecQuantity31=1&monthElecQuantity=1";
 
@@ -28,6 +23,7 @@ const DEFAULT_APIS = [
 
 const CACHE_KEY = "sgcc_bill_all";
 const ERROR_KEY = "sgcc_widget_error";
+const DIAG_KEY = "sgcc_last_diag";
 
 function toNum(v) {
   const n = parseFloat(v);
@@ -74,9 +70,7 @@ function sumCurrentMonth(dayList) {
 
 function pickBalance(info) {
   const bill = info?.eleBill;
-  if (!bill || typeof bill !== "object" || !Object.keys(bill).length) {
-    return null; // 账单基础信息空 → 显示 --
-  }
+  if (!bill || typeof bill !== "object" || !Object.keys(bill).length) return null;
   if (info?.arrearsOfFees) {
     const owe = toNum(bill.sumMoney);
     if (owe !== null) return -Math.abs(owe);
@@ -96,145 +90,64 @@ function normalizeList(raw) {
 
 function parsePayload(raw, index) {
   const list = normalizeList(raw);
-  if (!list.length) throw new Error("接口无数据");
+  if (!list.length) throw new Error("无缓存数据");
 
   const idx = Math.max(0, parseInt(index || "0", 10) || 0);
   const info = list[idx] || list[0];
   if (!info) throw new Error("户号下标无效");
-
-  if (info.__error) throw new Error(info.__error);
 
   const days = pickDayList(info);
   const bal = pickBalance(info);
   const yst = days.length ? days[days.length - 1].dayElePq : null;
   const total = sumCurrentMonth(days);
 
-  // 余额空但有用电量 → 仍算成功（国网账单接口常偶发失败）
   if (bal == null && yst == null && total == null && !info.userInfo) {
-    throw new Error(`${idx}:账单基础信息空`);
+    throw new Error("缓存无效：账单与电量都空");
   }
 
   return { yst, total, bal, billEmpty: bal == null };
 }
 
-function explainError(status, body, fallback) {
-  const text = String(body || fallback || "").trim();
-  const lower = text.toLowerCase();
-
-  if (text.includes("账单基础信息空")) {
-    return "余额接口暂无数据，可先看用电量；稍后重试同步";
-  }
-  if (text.includes("stepElecQuantity") || text.includes("缺省字段")) {
-    return "部分字段查询失败已跳过，请重新同步";
-  }
-  if (status === 400 || lower.includes("400")) {
-    if (text.includes("账号") || text.includes("密码") || text.includes("未配置")) {
-      return "模块未配置账号密码，请填写 USERNAME/PASSWORD";
-    }
-    // 400 但 body 可能仍是业务 JSON，提示先同步
-    return "HTTP 400：若已配置账号，请手动运行同步；账单空时可稍后重试";
-  }
-  if (lower.includes("body error")) {
-    return "响应异常：请先运行「网上国网手动同步」";
-  }
-  if (text) return text.slice(0, 120);
-  return fallback || "未知错误";
+function cacheAgeText(time) {
+  if (!time) return "";
+  const m = Math.max(0, Math.round((Date.now() - time) / 60000));
+  if (m < 60) return `${m}分钟前`;
+  const h = Math.round(m / 60);
+  return `${h}小时前`;
 }
 
 async function fetchRemote(ctx, urls) {
-  let lastMsg = "网络请求失败";
-
+  let lastMsg = "联网失败";
   for (const url of urls) {
     try {
       const resp = await ctx.http.get(url, { timeout: 55 });
       const text = await resp.text();
-
-      let raw = null;
+      let raw;
       try {
         raw = JSON.parse(text);
       } catch {
-        if (resp.status >= 400) {
-          lastMsg = explainError(resp.status, text, `HTTP ${resp.status}`);
-          continue;
-        }
-        lastMsg = explainError(resp.status, text, "响应不是 JSON");
+        lastMsg = `Live HTTP${resp.status}（非JSON）→ 多半没拦住`;
         continue;
       }
-
-      // 即使 status 400，只要 body 里有任一户号可用数据就接受
       const list = normalizeList(raw);
-      const useful = list.some((info, i) => {
-        try {
-          parsePayload([info], "0");
-          return true;
-        } catch {
-          return !!(info && info.userInfo);
-        }
-      });
-      if (!useful) {
-        lastMsg = explainError(
-          resp.status,
-          list.length ? "0:账单基础信息空" : "接口无数据",
-          "接口无可用数据"
-        );
+      if (!list.length) {
+        lastMsg = `Live HTTP${resp.status} 空数据`;
         continue;
       }
-
-      ctx.storage.setJSON(CACHE_KEY, { data: raw, time: Date.now(), source: url });
-      ctx.storage.delete(ERROR_KEY);
-      return raw;
+      ctx.storage.setJSON(CACHE_KEY, { data: list, time: Date.now(), source: url });
+      return list;
     } catch (e) {
-      lastMsg = explainError(0, "", e.message || String(e));
+      lastMsg = e.message || String(e);
     }
   }
-
   throw new Error(lastMsg);
-}
-
-async function loadBillData(ctx, index) {
-  const custom = (ctx.env.ApiUrl || "").trim();
-  const urls = custom ? [custom] : DEFAULT_APIS;
-
-  const cached = ctx.storage.getJSON(CACHE_KEY);
-  const cacheAgeMs = cached?.time ? Date.now() - cached.time : Infinity;
-  const cacheFresh = cacheAgeMs < 6 * 60 * 60 * 1000;
-
-  if (cached?.data && cacheFresh) {
-    try {
-      return {
-        parsed: parsePayload(cached.data, index),
-        fromCache: true,
-        cacheTime: cached.time,
-      };
-    } catch {
-      // 缓存损坏则继续拉取
-    }
-  }
-
-  try {
-    const raw = await fetchRemote(ctx, urls);
-    return { parsed: parsePayload(raw, index), fromCache: false };
-  } catch (e) {
-    if (cached?.data) {
-      return {
-        parsed: parsePayload(cached.data, index),
-        fromCache: true,
-        cacheTime: cached.time,
-        stale: true,
-        warn: e.message,
-      };
-    }
-
-    const errCache = ctx.storage.getJSON(ERROR_KEY);
-    if (errCache?.message) {
-      throw new Error(`${e.message}；最近同步失败：${errCache.message}`);
-    }
-    throw e;
-  }
 }
 
 export default async function (ctx) {
   const index = (ctx.env.Index || "0").trim();
+  const live = String(ctx.env.Live || "0").trim() === "1";
+  const custom = (ctx.env.ApiUrl || "").trim();
+  const urls = custom ? [custom] : DEFAULT_APIS;
 
   const colors = {
     bg:        { light: "#FFFFFF", dark: "#2C2C2E" },
@@ -243,43 +156,75 @@ export default async function (ctx) {
     value:     { light: "#1C1C1E", dark: "#FFFFFF" },
     time:      { light: "#999999", dark: "#666666" },
     error:     { light: "#FF3B30", dark: "#FF453A" },
-    warn:      { light: "#FF9500", dark: "#FF9F0A" },
     capsuleBg: { light: "#F5F5F7", dark: "#3A3A3C" },
     accent:    { light: "#007AFF", dark: "#0A84FF" },
   };
 
   let data = {
-    yst:   { title: "昨日用电", value: "--", unit: "度" },
+    yst: { title: "昨日用电", value: "--", unit: "度" },
     total: { title: "本月累计", value: "--", unit: "度" },
-    bal:   { title: "账户余额", value: "--", unit: "元" },
+    bal: { title: "账户余额", value: "--", unit: "元" },
     updateTime: "--:--",
+    sourceTag: "",
     error: null,
-    debugInfo: [],
+    hint: "",
   };
 
   try {
-    const result = await loadBillData(ctx, index);
-    data.yst.value = fmt(result.parsed.yst);
-    data.total.value = fmt(result.parsed.total);
-    data.bal.value = fmt(result.parsed.bal);
+    const cached = ctx.storage.getJSON(CACHE_KEY);
+    const diag = ctx.storage.getJSON(DIAG_KEY);
+    const errCache = ctx.storage.getJSON(ERROR_KEY);
+
+    let parsed = null;
+    let fromCache = false;
+
+    if (cached?.data) {
+      parsed = parsePayload(cached.data, index);
+      fromCache = true;
+      data.sourceTag = `缓存 ${cacheAgeText(cached.time)}`;
+    }
+
+    if (live) {
+      try {
+        const raw = await fetchRemote(ctx, urls);
+        parsed = parsePayload(raw, index);
+        fromCache = false;
+        data.sourceTag = "实时";
+      } catch (e) {
+        if (!parsed) throw e;
+        data.sourceTag = `缓存(实时失败)`;
+        data.hint = String(e.message || e).slice(0, 80);
+      }
+    }
+
+    if (!parsed) {
+      const tip =
+        (diag && diag.tip) ||
+        (errCache && errCache.message) ||
+        "无缓存：请先运行「网上国网手动同步」";
+      throw new Error(tip);
+    }
+
+    data.yst.value = fmt(parsed.yst);
+    data.total.value = fmt(parsed.total);
+    data.bal.value = fmt(parsed.bal);
     data.updateTime = new Date().toLocaleTimeString("zh-CN", {
       hour: "2-digit",
       minute: "2-digit",
       timeZone: "Asia/Shanghai",
     });
-    if (result.stale && result.warn) {
-      data.debugInfo.push(`缓存数据(${result.warn})`);
-    } else if (result.fromCache) {
-      data.debugInfo.push("缓存");
+    if (parsed.billEmpty) {
+      data.hint = data.hint || "余额空(账单接口未返回)";
     }
   } catch (e) {
-    data.error = "获取失败";
-    data.debugInfo.push(explainError(0, "", e.message || String(e)));
+    data.error = "无可用数据";
+    data.hint = String(e.message || e).slice(0, 140);
+    data.sourceTag = "未同步";
   }
 
   function makeCapsule(title, value, unit, isNegative = false) {
-    const valueColor = isNegative && parseFloat(value) < 0 ? colors.error : colors.value;
-
+    const valueColor =
+      isNegative && parseFloat(value) < 0 ? colors.error : colors.value;
     return {
       type: "stack",
       direction: "column",
@@ -341,7 +286,7 @@ export default async function (ctx) {
           font: { size: "body", weight: "medium" },
           textColor: colors.title,
           textAlign: "center",
-          numberOfLines: 1,
+          maxLines: 1,
         },
       ],
     };
@@ -365,10 +310,10 @@ export default async function (ctx) {
         },
         {
           type: "text",
-          text: data.debugInfo[0] || "请先运行网上国网同步脚本",
+          text: data.hint || "请运行手动同步",
           font: { size: "caption2" },
           textColor: colors.time,
-          maxLines: 4,
+          maxLines: 5,
         },
       ]
     : [
@@ -389,13 +334,20 @@ export default async function (ctx) {
                 makeCapsule(data.bal.title, data.bal.value, data.bal.unit, true),
               ],
         },
+        {
+          type: "text",
+          text: [data.sourceTag, data.hint].filter(Boolean).join(" · "),
+          font: { size: "caption2" },
+          textColor: colors.time,
+          maxLines: 2,
+        },
       ];
 
   return {
     type: "widget",
     backgroundColor: colors.bg,
     padding: isSmall ? [10, 12, 10, 12] : [10, 14, 10, 14],
-    gap: isSmall ? 6 : 12,
+    gap: isSmall ? 6 : 10,
     refreshAfter: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
     children: [
       {
@@ -419,7 +371,10 @@ export default async function (ctx) {
               {
                 type: "text",
                 text: "网上国网",
-                font: { size: isSmall ? "subheadline" : "headline", weight: "semibold" },
+                font: {
+                  size: isSmall ? "subheadline" : "headline",
+                  weight: "semibold",
+                },
                 textColor: colors.value,
               },
             ],
