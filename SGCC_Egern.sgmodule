@@ -1,19 +1,17 @@
 #!name=网上国网
-#!desc=务必先跑「保存账号」：在该脚本 Env 填 USERNAME/PASSWORD。模块参数在 Egern 里经常传不进 95598。
+#!desc=只在模块参数填 USERNAME/PASSWORD。先启用模块→填参数→开 MITM→跑「手动同步」→再看小组件。
 #!author=LaoTouWanYouXi
 #!icon=bolt.square.fill
 #!category=Widget
 #!arguments=USERNAME:"",PASSWORD:"",TIMEOUT:90
-#!arguments-desc=USERNAME/PASSWORD: 可填，但不保证生效；请同时在「保存账号」脚本 Env 再填一次\nTIMEOUT: 建议 90
+#!arguments-desc=USERNAME: 网上国网手机号\nPASSWORD: 登录密码\nTIMEOUT: 超时秒数，建议 90
 
 [Script]
-网上国网保存账号 = type=generic, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/SGCC_SaveAuth.js, timeout=30
+网上国网接口重写 = type=http-request, pattern=^https?:\/\/api\.wsgw-rewrite\.com\/electricity\/bill\/all, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/SGCC_Rewrite.js, requires-body=false, max-size=5242880, timeout={{{TIMEOUT}}}, argument=username={{{USERNAME}}}&password={{{PASSWORD}}}&service=true
 
-网上国网接口重写 = type=http-request, pattern=^https?:\/\/api\.wsgw-rewrite\.com\/electricity\/bill\/all, script-path=https://raw.githubusercontent.com/Yuheng0101/X/main/Tasks/95598/95598.js, requires-body=false, max-size=5242880, timeout={{{TIMEOUT}}}, argument=username="{{{USERNAME}}}"&password="{{{PASSWORD}}}"&service=true&debug=false
+网上国网定时同步 = type=cron, cronexp="0 9,21 * * *", script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/SGCC_Sync.js, timeout={{{TIMEOUT}}}, argument=username={{{USERNAME}}}&password={{{PASSWORD}}}
 
-网上国网定时同步 = type=cron, cronexp="0 9,21 * * *", script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/SGCC_Sync.js, timeout={{{TIMEOUT}}}, argument=username="{{{USERNAME}}}"&password="{{{PASSWORD}}}"
-
-网上国网手动同步 = type=generic, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/SGCC_Sync.js, timeout={{{TIMEOUT}}}, argument=username="{{{USERNAME}}}"&password="{{{PASSWORD}}}"
+网上国网手动同步 = type=generic, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/SGCC_Sync.js, timeout={{{TIMEOUT}}}, argument=username={{{USERNAME}}}&password={{{PASSWORD}}}
 
 网上国网小组件 = type=generic, script-path=https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/SGCC_Widget.JS, timeout={{{TIMEOUT}}}
 
