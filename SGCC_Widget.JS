@@ -1,25 +1,17 @@
 /**
- * 网上国网用电小组件（Egern）
+ * 网上国网用电小组件（Egern 手动导入）
  *
- * GitHub:
+ * 地址:
  * https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/SGCC_Widget.JS
  *
- * 默认只读缓存（避免小组件刷新再打假接口导致 400）。
- * 请先运行「网上国网手动同步」写入缓存。
+ * 添加方式：
+ *   类型: generic
+ *   超时: 30
+ *   不必填账号
+ *   然后在「小组件画廊」关联本脚本
  *
- *# ── 环境变量 ──
- * Index: "0"
- * Live: "0"     设为 "1" 才在小组件内联网（一般不需要）
- * ApiUrl: ""    Live=1 时可选自定义地址
+ * 依赖：先成功运行「同步」脚本写入缓存
  */
-
-const QUERY =
-  "eleBill=1&dayElecQuantity=1&dayElecQuantity31=1&monthElecQuantity=1";
-
-const DEFAULT_APIS = [
-  `http://api.wsgw-rewrite.com/electricity/bill/all?${QUERY}`,
-  `https://api.wsgw-rewrite.com/electricity/bill/all?${QUERY}`,
-];
 
 const CACHE_KEY = "sgcc_bill_all";
 const ERROR_KEY = "sgcc_widget_error";
@@ -90,7 +82,7 @@ function normalizeList(raw) {
 
 function parsePayload(raw, index) {
   const list = normalizeList(raw);
-  if (!list.length) throw new Error("无缓存数据");
+  if (!list.length) throw new Error("无缓存：请先运行同步脚本");
 
   const idx = Math.max(0, parseInt(index || "0", 10) || 0);
   const info = list[idx] || list[0];
@@ -102,9 +94,8 @@ function parsePayload(raw, index) {
   const total = sumCurrentMonth(days);
 
   if (bal == null && yst == null && total == null && !info.userInfo) {
-    throw new Error("缓存无效：账单与电量都空");
+    throw new Error("缓存无效");
   }
-
   return { yst, total, bal, billEmpty: bal == null };
 }
 
@@ -112,52 +103,21 @@ function cacheAgeText(time) {
   if (!time) return "";
   const m = Math.max(0, Math.round((Date.now() - time) / 60000));
   if (m < 60) return `${m}分钟前`;
-  const h = Math.round(m / 60);
-  return `${h}小时前`;
-}
-
-async function fetchRemote(ctx, urls) {
-  let lastMsg = "联网失败";
-  for (const url of urls) {
-    try {
-      const resp = await ctx.http.get(url, { timeout: 55 });
-      const text = await resp.text();
-      let raw;
-      try {
-        raw = JSON.parse(text);
-      } catch {
-        lastMsg = `Live HTTP${resp.status}（非JSON）→ 多半没拦住`;
-        continue;
-      }
-      const list = normalizeList(raw);
-      if (!list.length) {
-        lastMsg = `Live HTTP${resp.status} 空数据`;
-        continue;
-      }
-      ctx.storage.setJSON(CACHE_KEY, { data: list, time: Date.now(), source: url });
-      return list;
-    } catch (e) {
-      lastMsg = e.message || String(e);
-    }
-  }
-  throw new Error(lastMsg);
+  return `${Math.round(m / 60)}小时前`;
 }
 
 export default async function (ctx) {
   const index = (ctx.env.Index || "0").trim();
-  const live = String(ctx.env.Live || "0").trim() === "1";
-  const custom = (ctx.env.ApiUrl || "").trim();
-  const urls = custom ? [custom] : DEFAULT_APIS;
 
   const colors = {
-    bg:        { light: "#FFFFFF", dark: "#2C2C2E" },
-    border:    { light: "#E5E5EA", dark: "#3A3A3C" },
-    title:     { light: "#666666", dark: "#8E8E93" },
-    value:     { light: "#1C1C1E", dark: "#FFFFFF" },
-    time:      { light: "#999999", dark: "#666666" },
-    error:     { light: "#FF3B30", dark: "#FF453A" },
+    bg: { light: "#FFFFFF", dark: "#2C2C2E" },
+    border: { light: "#E5E5EA", dark: "#3A3A3C" },
+    title: { light: "#666666", dark: "#8E8E93" },
+    value: { light: "#1C1C1E", dark: "#FFFFFF" },
+    time: { light: "#999999", dark: "#666666" },
+    error: { light: "#FF3B30", dark: "#FF453A" },
     capsuleBg: { light: "#F5F5F7", dark: "#3A3A3C" },
-    accent:    { light: "#007AFF", dark: "#0A84FF" },
+    accent: { light: "#007AFF", dark: "#0A84FF" },
   };
 
   let data = {
@@ -175,36 +135,15 @@ export default async function (ctx) {
     const diag = ctx.storage.getJSON(DIAG_KEY);
     const errCache = ctx.storage.getJSON(ERROR_KEY);
 
-    let parsed = null;
-    let fromCache = false;
-
-    if (cached?.data) {
-      parsed = parsePayload(cached.data, index);
-      fromCache = true;
-      data.sourceTag = `缓存 ${cacheAgeText(cached.time)}`;
-    }
-
-    if (live) {
-      try {
-        const raw = await fetchRemote(ctx, urls);
-        parsed = parsePayload(raw, index);
-        fromCache = false;
-        data.sourceTag = "实时";
-      } catch (e) {
-        if (!parsed) throw e;
-        data.sourceTag = `缓存(实时失败)`;
-        data.hint = String(e.message || e).slice(0, 80);
-      }
-    }
-
-    if (!parsed) {
-      const tip =
+    if (!cached?.data) {
+      throw new Error(
         (diag && diag.tip) ||
-        (errCache && errCache.message) ||
-        "无缓存：请先运行「网上国网手动同步」";
-      throw new Error(tip);
+          (errCache && errCache.message) ||
+          "无缓存：请先运行同步脚本"
+      );
     }
 
+    const parsed = parsePayload(cached.data, index);
     data.yst.value = fmt(parsed.yst);
     data.total.value = fmt(parsed.total);
     data.bal.value = fmt(parsed.bal);
@@ -213,13 +152,11 @@ export default async function (ctx) {
       minute: "2-digit",
       timeZone: "Asia/Shanghai",
     });
-    if (parsed.billEmpty) {
-      data.hint = data.hint || "余额空(账单接口未返回)";
-    }
+    data.sourceTag = `缓存 ${cacheAgeText(cached.time)}`;
+    if (parsed.billEmpty) data.hint = "余额空";
   } catch (e) {
     data.error = "无可用数据";
     data.hint = String(e.message || e).slice(0, 140);
-    data.sourceTag = "未同步";
   }
 
   function makeCapsule(title, value, unit, isNegative = false) {
@@ -310,7 +247,7 @@ export default async function (ctx) {
         },
         {
           type: "text",
-          text: data.hint || "请运行手动同步",
+          text: data.hint,
           font: { size: "caption2" },
           textColor: colors.time,
           maxLines: 5,
@@ -381,45 +318,14 @@ export default async function (ctx) {
           },
           { type: "spacer" },
           {
-            type: "stack",
-            direction: "row",
-            alignItems: "center",
-            gap: 5,
-            children: [
-              {
-                type: "image",
-                src: "sf-symbol:arrow.clockwise",
-                color: colors.time,
-                width: 12,
-                height: 12,
-              },
-              {
-                type: "text",
-                text: data.updateTime,
-                font: { size: "caption2" },
-                textColor: colors.time,
-              },
-            ],
+            type: "text",
+            text: data.updateTime,
+            font: { size: "caption2" },
+            textColor: colors.time,
           },
         ],
       },
       ...bodyChildren,
-      {
-        type: "stack",
-        direction: "row",
-        alignItems: "center",
-        children: [
-          { type: "spacer" },
-          {
-            type: "stack",
-            width: 48,
-            height: 4,
-            borderRadius: 2,
-            backgroundColor: colors.border,
-          },
-          { type: "spacer" },
-        ],
-      },
     ],
   };
 }

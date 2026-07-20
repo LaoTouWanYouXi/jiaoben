@@ -1,15 +1,32 @@
 /**
- * 网上国网 · 接口重写入口（Egern / Surge）
+ * 网上国网 · 接口重写（Egern 手动导入）
  *
- * GitHub:
+ * 地址:
  * https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/SGCC_Rewrite.js
  *
- * 作用：从模块 argument 读取账号，写入 95598 可读取的本地存储，再加载官方 95598.js
- * 账号只在 sgmodule 的 USERNAME / PASSWORD 参数里配置即可。
+ * 添加方式（工具 → 脚本 → +）：
+ *   类型: http_request
+ *   匹配: ^https?:\/\/api\.wsgw-rewrite\.com\/electricity\/bill\/all
+ *   脚本: 上面地址（或本地文件）
+ *   超时: 90
+ *   需要 Body: 否
+ *   Env:
+ *     USERNAME = 手机号
+ *     PASSWORD = 密码
+ *
+ * 同时在 MITM 主机名加入: api.wsgw-rewrite.com
  */
 
 const SGCC_JS =
   "https://raw.githubusercontent.com/Yuheng0101/X/main/Tasks/95598/95598.js";
+
+function pickEnv(env, keys) {
+  for (const k of keys) {
+    const v = env && env[k];
+    if (v != null && String(v).trim() !== "") return String(v).trim();
+  }
+  return "";
+}
 
 function parseArg(raw) {
   if (raw == null || raw === "") return {};
@@ -23,7 +40,6 @@ function parseArg(raw) {
       const i = pair.indexOf("=");
       const k = decodeURIComponent((i >= 0 ? pair.slice(0, i) : pair).trim());
       let v = decodeURIComponent((i >= 0 ? pair.slice(i + 1) : "").trim());
-      // 去掉可能残留的引号
       if (
         (v.startsWith('"') && v.endsWith('"')) ||
         (v.startsWith("'") && v.endsWith("'"))
@@ -35,107 +51,232 @@ function parseArg(raw) {
   return out;
 }
 
-function pick(obj, keys) {
-  for (const k of keys) {
-    if (obj && obj[k] != null && String(obj[k]).trim() !== "") {
-      return String(obj[k]).trim();
-    }
-  }
-  return "";
-}
+function installShims(ctx, username, password) {
+  const store = Object.create(null);
 
-function writeAuth(username, password) {
-  try {
-    if (typeof $persistentStore !== "undefined" && $persistentStore.write) {
-      $persistentStore.write(username, "95598_username");
-      $persistentStore.write(password, "95598_password");
-      $persistentStore.write("true", "95598_service_mode");
-    }
-  } catch (_) {}
-  try {
-    if (typeof $prefs !== "undefined" && $prefs.setValueForKey) {
-      $prefs.setValueForKey(username, "95598_username");
-      $prefs.setValueForKey(password, "95598_password");
-    }
-  } catch (_) {}
-}
+  // 预写入账号，供 95598 读取
+  store["95598_username"] = username;
+  store["95598_password"] = password;
+  store["95598_service_mode"] = "true";
 
-function fail(msg) {
-  const body = JSON.stringify({
-    message: msg,
-    title: "网上国网",
-    subt: "账号未就绪",
-  });
-  const response = {
-    status: 400,
-    headers: { "content-type": "application/json;charset=utf8" },
-    body,
-  };
-  if (typeof $done === "function") {
-    // Surge / Egern 兼容
-    try {
-      $done({ response });
-    } catch (_) {
+  try {
+    const oldU = ctx.storage.get("95598_username");
+    const oldP = ctx.storage.get("95598_password");
+    if (oldU) store["95598_username"] = oldU;
+    if (oldP) store["95598_password"] = oldP;
+  } catch (_) {}
+
+  // 以本次 Env 为准
+  store["95598_username"] = username;
+  store["95598_password"] = password;
+
+  globalThis.$persistentStore = {
+    read(key) {
       try {
-        $done(response);
-      } catch (__) {}
-    }
-  }
-}
+        const v = ctx.storage.get(key);
+        if (v != null && v !== "") return v;
+      } catch (_) {}
+      return Object.prototype.hasOwnProperty.call(store, key)
+        ? store[key]
+        : null;
+    },
+    write(value, key) {
+      store[key] = String(value);
+      try {
+        ctx.storage.set(key, String(value));
+      } catch (_) {}
+      return true;
+    },
+  };
 
-function run95598(username, password) {
-  // 确保 95598 能从 $argument 读到
-  const argStr = `username=${encodeURIComponent(username)}&password=${encodeURIComponent(
-    password
-  )}&service=true&debug=false`;
-  try {
-    globalThis.$argument = argStr;
-  } catch (_) {}
-  try {
-    $argument = argStr;
-  } catch (_) {}
+  globalThis.$argument = `username=${encodeURIComponent(
+    username
+  )}&password=${encodeURIComponent(password)}&service=true&debug=false`;
 
-  if (typeof $httpClient === "undefined" || !$httpClient.get) {
-    fail("当前环境无 $httpClient，无法加载 95598.js");
-    return;
-  }
+  globalThis.$request = {
+    url: (ctx.request && ctx.request.url) || "",
+    method: (ctx.request && ctx.request.method) || "GET",
+    headers: {},
+    body: "",
+  };
 
-  $httpClient.get({ url: SGCC_JS, timeout: 30 }, (err, resp, body) => {
-    if (err || !body) {
-      fail("下载 95598.js 失败: " + (err || "empty body"));
-      return;
-    }
+  const httpCall = async (method, opts) => {
+    const option = typeof opts === "string" ? { url: opts } : opts || {};
+    const url = option.url;
+    const headers = option.headers || {};
+    const body = option.body;
+    const timeout = option.timeout || 30;
+    const m = String(method).toLowerCase();
+    const resp = await ctx.http[m](url, { headers, body, timeout });
+    const status = resp.status;
+    const text = await resp.text();
+    const hdrs = {};
     try {
-      // 95598 为自执行脚本，内部会 $done
-      (0, eval)(body);
-    } catch (e) {
-      fail("执行 95598.js 失败: " + (e && e.message ? e.message : e));
-    }
-  });
+      if (resp.headers && typeof resp.headers.forEach === "function") {
+        resp.headers.forEach((v, k) => {
+          hdrs[k] = v;
+        });
+      }
+    } catch (_) {}
+    return { status, headers: hdrs, body: text };
+  };
+
+  const wrap = (method) => (opts, cb) => {
+    Promise.resolve()
+      .then(() => httpCall(method, opts))
+      .then((r) => {
+        const fakeResp = {
+          status: r.status,
+          statusCode: r.status,
+          headers: r.headers,
+        };
+        if (typeof cb === "function") cb(null, fakeResp, r.body);
+      })
+      .catch((e) => {
+        if (typeof cb === "function") cb(e, null, null);
+      });
+  };
+
+  globalThis.$httpClient = {
+    get: wrap("get"),
+    post: wrap("post"),
+    put: wrap("put"),
+    delete: wrap("delete"),
+    head: wrap("head"),
+    patch: wrap("patch"),
+  };
+
+  // 通知（可选）
+  if (typeof globalThis.$notification === "undefined") {
+    globalThis.$notification = {
+      post(title, subt, body) {
+        try {
+          ctx.notify({
+            title: String(title || ""),
+            body: [subt, body].filter(Boolean).join("\n"),
+          });
+        } catch (_) {}
+      },
+    };
+  }
 }
 
-(function main() {
-  const arg = parseArg(typeof $argument !== "undefined" ? $argument : "");
-  const username = pick(arg, [
-    "username",
-    "USERNAME",
-    "SGCC_USERNAME",
-    "95598_username",
-  ]);
-  const password = pick(arg, [
-    "password",
-    "PASSWORD",
-    "SGCC_PASSWORD",
-    "95598_password",
-  ]);
+export default async function (ctx) {
+  const arg = parseArg(
+    typeof $argument !== "undefined" && $argument != null ? $argument : ""
+  );
+
+  const username =
+    pickEnv(ctx.env, ["USERNAME", "SGCC_USERNAME", "username"]) ||
+    pickEnv(arg, ["USERNAME", "username", "SGCC_USERNAME"]);
+  const password =
+    pickEnv(ctx.env, ["PASSWORD", "SGCC_PASSWORD", "password"]) ||
+    pickEnv(arg, ["PASSWORD", "password", "SGCC_PASSWORD"]);
 
   if (!username || !password) {
-    fail(
-      "未配置账号密码：请在模块参数 USERNAME / PASSWORD 中填写（不要填脚本 Env）"
-    );
-    return;
+    return ctx.respond({
+      status: 400,
+      headers: { "content-type": "application/json;charset=utf8" },
+      body: JSON.stringify({
+        message:
+          "未配置账号密码：请在本「接口重写」脚本的 Env 填写 USERNAME、PASSWORD",
+      }),
+    });
   }
 
-  writeAuth(username, password);
-  run95598(username, password);
-})();
+  try {
+    ctx.storage.set("sgcc_username", username);
+    ctx.storage.set("sgcc_password", password);
+    ctx.storage.set("95598_username", username);
+    ctx.storage.set("95598_password", password);
+  } catch (_) {}
+
+  return await new Promise(async (resolve) => {
+    let settled = false;
+    const finish = (payload) => {
+      if (settled) return;
+      settled = true;
+      try {
+        if (payload && payload.response) {
+          resolve(ctx.respond(payload.response));
+          return;
+        }
+        if (payload && (payload.status || payload.body != null)) {
+          resolve(
+            ctx.respond({
+              status: payload.status || 200,
+              headers: payload.headers || {
+                "content-type": "application/json;charset=utf8",
+              },
+              body: payload.body,
+            })
+          );
+          return;
+        }
+        resolve(
+          ctx.respond({
+            status: 200,
+            headers: { "content-type": "application/json;charset=utf8" },
+            body: typeof payload === "string" ? payload : JSON.stringify(payload),
+          })
+        );
+      } catch (e) {
+        resolve(
+          ctx.respond({
+            status: 400,
+            headers: { "content-type": "application/json;charset=utf8" },
+            body: JSON.stringify({
+              message: "respond 失败: " + (e.message || e),
+            }),
+          })
+        );
+      }
+    };
+
+    try {
+      installShims(ctx, username, password);
+      globalThis.$done = finish;
+
+      const resp = await ctx.http.get(SGCC_JS, { timeout: 30 });
+      const code = await resp.text();
+      if (!code || resp.status >= 400) {
+        finish({
+          response: {
+            status: 400,
+            headers: { "content-type": "application/json;charset=utf8" },
+            body: JSON.stringify({
+              message: "下载 95598.js 失败 status=" + resp.status,
+            }),
+          },
+        });
+        return;
+      }
+
+      // 启动官方脚本（内部异步结束后会调 $done）
+      (0, eval)(code);
+
+      // 防止卡死
+      setTimeout(() => {
+        finish({
+          response: {
+            status: 400,
+            headers: { "content-type": "application/json;charset=utf8" },
+            body: JSON.stringify({
+              message: "95598.js 执行超时，请把超时调到 90 秒后重试",
+            }),
+          },
+        });
+      }, 80000);
+    } catch (e) {
+      finish({
+        response: {
+          status: 400,
+          headers: { "content-type": "application/json;charset=utf8" },
+          body: JSON.stringify({
+            message: "重写执行失败: " + (e.message || e),
+          }),
+        },
+      });
+    }
+  });
+}

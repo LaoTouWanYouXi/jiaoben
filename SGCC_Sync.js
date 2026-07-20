@@ -1,11 +1,17 @@
 /**
- * 网上国网数据同步（Egern）
+ * 网上国网数据同步（Egern 手动导入）
  *
- * GitHub:
+ * 地址:
  * https://raw.githubusercontent.com/LaoTouWanYouXi/jiaoben/refs/heads/main/SGCC_Sync.js
  *
- * 账号只从模块参数传入的 $argument 读取（sgmodule 的 USERNAME / PASSWORD）。
- * 无需也不依赖脚本 Env。
+ * 添加方式：
+ *   类型: generic（再复制一条 schedule 也可）
+ *   超时: 90
+ *   Env（建议与重写脚本填一样）:
+ *     USERNAME = 手机号
+ *     PASSWORD = 密码
+ *
+ * 先保证「接口重写」脚本已添加且 Env 已填，再运行本脚本。
  */
 
 const QUERY =
@@ -20,54 +26,12 @@ const CACHE_KEY = "sgcc_bill_all";
 const ERROR_KEY = "sgcc_widget_error";
 const DIAG_KEY = "sgcc_last_diag";
 
-function parseArg(raw) {
-  if (raw == null || raw === "") return {};
-  if (typeof raw === "object") return raw;
-  const out = {};
-  String(raw)
-    .replace(/^\?/, "")
-    .split("&")
-    .forEach((pair) => {
-      if (!pair) return;
-      const i = pair.indexOf("=");
-      const k = decodeURIComponent((i >= 0 ? pair.slice(0, i) : pair).trim());
-      let v = decodeURIComponent((i >= 0 ? pair.slice(i + 1) : "").trim());
-      if (
-        (v.startsWith('"') && v.endsWith('"')) ||
-        (v.startsWith("'") && v.endsWith("'"))
-      ) {
-        v = v.slice(1, -1);
-      }
-      if (k) out[k] = v;
-    });
-  return out;
-}
-
-function pick(obj, keys) {
+function pick(env, keys) {
   for (const k of keys) {
-    if (obj && obj[k] != null && String(obj[k]).trim() !== "") {
-      return String(obj[k]).trim();
-    }
+    const v = env && env[k];
+    if (v != null && String(v).trim() !== "") return String(v).trim();
   }
   return "";
-}
-
-function readArgument() {
-  try {
-    if (typeof $argument !== "undefined" && $argument != null) {
-      return parseArg($argument);
-    }
-  } catch (_) {}
-  return {};
-}
-
-function writeAuth(username, password) {
-  try {
-    if (typeof $persistentStore !== "undefined" && $persistentStore.write) {
-      $persistentStore.write(username, "95598_username");
-      $persistentStore.write(password, "95598_password");
-    }
-  } catch (_) {}
 }
 
 function dayList(info) {
@@ -106,71 +70,30 @@ function summarize(list) {
   return tips;
 }
 
-function diagnose(status, text, parsed, hasArg) {
-  const body = String(text || "").trim();
-  const msg = String(
-    (parsed && (parsed.message || parsed.error || parsed.subt)) || body
-  );
-
-  if (msg.includes("未配置") || (msg.includes("账号") && msg.includes("密码"))) {
-    return {
-      code: "NO_AUTH",
-      tip: `【未配置账号】请到模块参数填写 USERNAME/PASSWORD 并保存。argument已传入=${hasArg}`,
-    };
-  }
-  if (!parsed && (status === 400 || body.toLowerCase().includes("bad request"))) {
-    return {
-      code: "HTTP400",
-      tip: `【HTTP400】请确认：模块已启用、参数已填、MITM开且证书信任、VPN开。argument=${hasArg} body=${body.slice(0, 50) || "(空)"}`,
-    };
-  }
-  if (!parsed) {
-    return {
-      code: "PARSE",
-      tip: `【响应异常】status=${status} body=${body.slice(0, 80) || "(空)"}`,
-    };
-  }
-
-  const list = normalizeList(parsed);
-  if (!list.length) {
-    return { code: "EMPTY", tip: "【空数据】无户号，确认国网已绑定户号" };
-  }
-  if (list.some((x) => hasBalance(x) || hasUsage(x) || x?.userInfo)) {
-    if (!list.some(hasBalance)) {
-      return { code: "PARTIAL", tip: "【部分成功】余额空，用电量可显示" };
-    }
-    return { code: "OK", tip: "【成功】" };
-  }
-  return { code: "EMPTY_FIELDS", tip: "【字段全空】稍后重试" };
-}
-
 export default async function (ctx) {
-  const arg = readArgument();
-  const username = pick(arg, [
-    "username",
+  const username = pick(ctx.env, [
     "USERNAME",
     "SGCC_USERNAME",
-    "95598_username",
+    "username",
   ]);
-  const password = pick(arg, [
-    "password",
+  const password = pick(ctx.env, [
     "PASSWORD",
     "SGCC_PASSWORD",
-    "95598_password",
+    "password",
   ]);
-  const hasArg = !!(username && password);
 
-  if (hasArg) writeAuth(username, password);
-
-  if (!hasArg) {
-    const tip =
-      "【未配置账号】sgmodule 请在「模块参数」填 USERNAME、PASSWORD（脚本内无法设 Env）";
-    ctx.storage.setJSON(ERROR_KEY, { message: tip, time: Date.now() });
-    ctx.notify({ title: "网上国网同步失败", body: tip });
-    return;
+  if (username && password) {
+    try {
+      ctx.storage.set("sgcc_username", username);
+      ctx.storage.set("sgcc_password", password);
+      ctx.storage.set("95598_username", username);
+      ctx.storage.set("95598_password", password);
+    } catch (_) {}
   }
 
-  const logs = [`arg尾号${username.slice(-4)}`];
+  const logs = [
+    username ? `env尾号${username.slice(-4)}` : "env无账号(依赖重写脚本Env)",
+  ];
   let lastDiag = null;
 
   for (const url of API_CANDIDATES) {
@@ -185,50 +108,58 @@ export default async function (ctx) {
         parsed = null;
       }
 
-      const diag = diagnose(resp.status, text, parsed, hasArg);
-      lastDiag = { ...diag, status: resp.status, proto, time: Date.now() };
-      logs.push(`${proto}→${resp.status}/${diag.code}`);
+      const msg = String(
+        (parsed && (parsed.message || parsed.error || parsed.subt)) || text || ""
+      );
+
+      if (msg.includes("未配置") || (msg.includes("账号") && msg.includes("密码"))) {
+        lastDiag = {
+          tip: "【未配置】请到「接口重写」脚本 Env 填写 USERNAME、PASSWORD",
+          status: resp.status,
+        };
+        logs.push(`${proto}→未配置账号`);
+        continue;
+      }
 
       const list = normalizeList(parsed);
       const useful = list.some(
         (info) => hasBalance(info) || hasUsage(info) || info?.userInfo
       );
+
       if (useful) {
         const warnings = summarize(list);
+        const tip = list.some(hasBalance)
+          ? "【成功】"
+          : "【部分成功】余额空，用电量可显示";
         ctx.storage.setJSON(CACHE_KEY, {
           data: list,
           time: Date.now(),
           source: url,
           warnings,
-          diag: lastDiag,
         });
         ctx.storage.delete(ERROR_KEY);
-        ctx.storage.setJSON(DIAG_KEY, lastDiag);
+        ctx.storage.setJSON(DIAG_KEY, { tip, status: resp.status, time: Date.now() });
         ctx.notify({
           title: "网上国网同步",
-          body: `${diag.tip}｜户数${list.length}${
+          body: `${tip}｜户数${list.length}${
             warnings.length ? "｜" + warnings.join(",") : ""
           }｜${logs.join("；")}`,
         });
         return;
       }
-    } catch (e) {
+
       lastDiag = {
-        code: "THROW",
-        tip: `【异常】${e.message || e}`,
-        time: Date.now(),
+        tip: `【无数据】HTTP${resp.status} ${msg.slice(0, 80) || "(空)"}`,
+        status: resp.status,
       };
+      logs.push(`${proto}→${resp.status}`);
+    } catch (e) {
+      lastDiag = { tip: `【异常】${e.message || e}`, status: -1 };
       logs.push(`${proto}异常`);
     }
   }
 
-  ctx.storage.setJSON(ERROR_KEY, {
-    message: (lastDiag && lastDiag.tip) || "同步失败",
-    time: Date.now(),
-  });
-  if (lastDiag) ctx.storage.setJSON(DIAG_KEY, lastDiag);
-  ctx.notify({
-    title: "网上国网同步失败",
-    body: `${(lastDiag && lastDiag.tip) || "未知错误"}｜${logs.join("；")}`,
-  });
+  const tip = (lastDiag && lastDiag.tip) || "同步失败";
+  ctx.storage.setJSON(ERROR_KEY, { message: tip, time: Date.now() });
+  ctx.notify({ title: "网上国网同步失败", body: `${tip}｜${logs.join("；")}` });
 }
